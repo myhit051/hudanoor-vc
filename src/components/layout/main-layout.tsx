@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Sidebar } from "./sidebar";
 
 import Index from "@/pages/Index";
@@ -14,12 +15,29 @@ import { StockInventory } from "@/pages/StockInventory";
 import { AddRecordForm } from "@/components/forms/add-record-form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSheetsData } from "@/hooks/use-sheets-data";
-import { toast } from "@/hooks/use-toast";
+
+const pathToPage: Record<string, string> = {
+  '/': 'dashboard',
+  '/stock-receiving': 'stock-receiving',
+  '/sales-entry': 'sales-entry',
+  '/stock-inventory': 'stock-inventory',
+  '/task-reminder': 'task-reminder',
+  '/employees': 'employees',
+  '/update-logs': 'update-logs',
+  '/settings': 'settings',
+};
+
+const pageToPath: Record<string, string> = Object.fromEntries(
+  Object.entries(pathToPage).map(([path, page]) => [page, path])
+);
 
 export function MainLayout() {
-  const [currentPage, setCurrentPage] = useState('dashboard');
+  const location = useLocation();
+  const navigate = useNavigate();
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
-  
+
+  const currentPage = pathToPage[location.pathname] ?? 'dashboard';
+
   const {
     addIncome,
     addExpense,
@@ -38,6 +56,10 @@ export function MainLayout() {
     } catch (error) {
       console.error('Error adding record:', error);
     }
+  };
+
+  const handlePageChange = (page: string) => {
+    navigate(pageToPath[page] ?? '/');
   };
 
   const renderCurrentPage = () => {
@@ -65,9 +87,9 @@ export function MainLayout() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      <Sidebar 
+      <Sidebar
         currentPage={currentPage}
-        onPageChange={setCurrentPage}
+        onPageChange={handlePageChange}
         onAddRecord={() => setIsAddFormOpen(true)}
       />
       
