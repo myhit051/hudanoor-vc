@@ -388,16 +388,16 @@ export function StockReceiving() {
                 <span className="text-sm font-semibold text-rose-600">รวม {gridTotal} ชิ้น</span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
+                <table className="border-collapse">
                   <thead>
                     <tr>
-                      <th className="text-left text-sm font-medium text-muted-foreground pb-2 pr-4 min-w-24">สี \ ไซส์</th>
+                      <th className="text-left text-sm font-medium text-muted-foreground pb-2 pr-6 w-32">สี \ ไซส์</th>
                       {form.sizes.map(size => (
-                        <th key={size} className="text-center text-sm font-medium text-muted-foreground pb-2 px-2 min-w-20">
+                        <th key={size} className="text-center text-sm font-medium text-muted-foreground pb-2 px-2 w-24">
                           {size}
                         </th>
                       ))}
-                      <th className="text-right text-sm font-medium text-muted-foreground pb-2 pl-4">รวม</th>
+                      <th className="text-right text-sm font-medium text-muted-foreground pb-2 pl-6 w-16">รวม</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -405,7 +405,7 @@ export function StockReceiving() {
                       const rowTotal = form.sizes.reduce((s, sz) => s + (parseInt(form.grid[color]?.[sz] || '0') || 0), 0);
                       return (
                         <tr key={color} className="border-t border-gray-100">
-                          <td className="py-2 pr-4">
+                          <td className="py-2 pr-6">
                             <span className="text-sm font-medium">{color}</span>
                           </td>
                           {form.sizes.map((size, si) => (
@@ -423,8 +423,8 @@ export function StockReceiving() {
                               />
                             </td>
                           ))}
-                          <td className="py-2 pl-4 text-right">
-                            <span className={cn("text-sm font-semibold", rowTotal > 0 ? "text-rose-600" : "text-muted-foreground")}>
+                          <td className="py-2 pl-6 text-right">
+                            <span className={cn("text-sm font-semibold tabular-nums", rowTotal > 0 ? "text-rose-600" : "text-muted-foreground")}>
                               {rowTotal}
                             </span>
                           </td>
@@ -434,19 +434,19 @@ export function StockReceiving() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-gray-200">
-                      <td className="pt-2 pr-4 text-sm font-medium text-muted-foreground">รวมทั้งหมด</td>
+                      <td className="pt-2 pr-6 text-sm font-medium text-muted-foreground">รวมทั้งหมด</td>
                       {form.sizes.map(size => {
                         const colTotal = form.colors.reduce((s, c) => s + (parseInt(form.grid[c]?.[size] || '0') || 0), 0);
                         return (
                           <td key={size} className="pt-2 px-2 text-center">
-                            <span className={cn("text-sm font-semibold", colTotal > 0 ? "text-rose-600" : "text-muted-foreground")}>
+                            <span className={cn("text-sm font-semibold tabular-nums", colTotal > 0 ? "text-rose-600" : "text-muted-foreground")}>
                               {colTotal}
                             </span>
                           </td>
                         );
                       })}
-                      <td className="pt-2 pl-4 text-right">
-                        <span className="text-sm font-bold text-rose-600">{gridTotal}</span>
+                      <td className="pt-2 pl-6 text-right">
+                        <span className="text-sm font-bold text-rose-600 tabular-nums">{gridTotal}</span>
                       </td>
                     </tr>
                   </tfoot>
