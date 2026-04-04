@@ -19,7 +19,8 @@ import {
   Plus,
   X,
   Tag,
-  Building
+  Building,
+  Globe
 } from "lucide-react";
 
 const colorOptions = [
