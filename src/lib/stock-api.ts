@@ -73,6 +73,9 @@ export interface StockInventoryItem {
   total_in: number;
   total_sold: number;
   remaining: number;
+  avg_cost_price: number;
+  avg_sell_price: number;
+  stock_value: number;
 }
 
 export async function getAvailableStock(): Promise<AvailableStockItem[]> {

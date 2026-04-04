@@ -27,7 +27,10 @@ export default async function handler(req, res) {
               s.size,
               COALESCE(SUM(s.quantity), 0) AS total_in,
               COALESCE(SUM(so.qty_sold), 0) AS total_sold,
-              COALESCE(SUM(s.quantity), 0) - COALESCE(SUM(so.qty_sold), 0) AS remaining
+              COALESCE(SUM(s.quantity), 0) - COALESCE(SUM(so.qty_sold), 0) AS remaining,
+              COALESCE(AVG(s.cost_price), 0) AS avg_cost_price,
+              COALESCE(AVG(s.sell_price), 0) AS avg_sell_price,
+              (COALESCE(SUM(s.quantity), 0) - COALESCE(SUM(so.qty_sold), 0)) * COALESCE(AVG(s.cost_price), 0) AS stock_value
             FROM stock_in s
             LEFT JOIN (
               SELECT sku, color, size, SUM(quantity) AS qty_sold

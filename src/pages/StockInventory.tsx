@@ -113,7 +113,8 @@ export function StockInventory() {
     const totalRemaining = inventory.reduce((s, i) => s + Number(i.remaining), 0);
     const outOfStock = inventory.filter(i => Number(i.remaining) <= 0).length;
     const lowStock = inventory.filter(i => Number(i.remaining) > 0 && Number(i.remaining) <= 3).length;
-    return { totalSKUs, totalRemaining, outOfStock, lowStock };
+    const totalStockValue = inventory.reduce((s, i) => s + Number(i.stock_value), 0);
+    return { totalSKUs, totalRemaining, outOfStock, lowStock, totalStockValue };
   }, [inventory]);
 
   const lowStockItems = useMemo(
@@ -185,7 +186,7 @@ export function StockInventory() {
       )}
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center justify-between mb-2">
@@ -224,6 +225,18 @@ export function StockInventory() {
             </div>
             <p className="text-3xl font-bold text-red-500">{stats.outOfStock}</p>
             <p className="text-xs text-muted-foreground mt-1">รายการ</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-muted-foreground">มูลค่าสต๊อกรวม</p>
+              <CircleDollarSign className="h-4 w-4 text-emerald-400" />
+            </div>
+            <p className="text-2xl font-bold text-emerald-600">
+              ฿{stats.totalStockValue.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">ต้นทุน × คงเหลือ</p>
           </CardContent>
         </Card>
       </div>
@@ -357,6 +370,8 @@ export function StockInventory() {
                     <TableHead className="text-right">รับเข้า</TableHead>
                     <TableHead className="text-right">ขายออก</TableHead>
                     <TableHead className="text-right">คงเหลือ</TableHead>
+                    <TableHead className="text-right">ต้นทุน/ชิ้น</TableHead>
+                    <TableHead className="text-right">มูลค่าสต๊อก</TableHead>
                     <TableHead>สัดส่วน</TableHead>
                     <TableHead>สถานะ</TableHead>
                     <TableHead></TableHead>
@@ -382,6 +397,12 @@ export function StockInventory() {
                         <TableCell className="text-right text-rose-500">{Number(item.total_sold)}</TableCell>
                         <TableCell className={`text-right font-bold ${isOut ? 'text-red-600' : isLow ? 'text-orange-500' : 'text-green-600'}`}>
                           {remaining}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground text-sm">
+                          {Number(item.avg_cost_price) > 0 ? `฿${Number(item.avg_cost_price).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '-'}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-emerald-700 dark:text-emerald-400 text-sm">
+                          {Number(item.stock_value) > 0 ? `฿${Number(item.stock_value).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '-'}
                         </TableCell>
                         <TableCell className="w-28">
                           <div className="flex items-center gap-2">
