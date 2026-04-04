@@ -9,6 +9,8 @@ import { EmployeeManagement } from "@/pages/EmployeeManagement";
 import { UpdateLogs } from "@/pages/UpdateLogs";
 import { AppSettings } from "@/pages/AppSettings";
 import { StockReceiving } from "@/pages/StockReceiving";
+import { SalesEntry } from "@/pages/SalesEntry";
+import { StockInventory } from "@/pages/StockInventory";
 import { AddRecordForm } from "@/components/forms/add-record-form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSheetsData } from "@/hooks/use-sheets-data";
@@ -44,6 +46,10 @@ export function MainLayout() {
         return <Index />;
       case 'stock-receiving':
         return <StockReceiving />;
+      case 'sales-entry':
+        return <SalesEntry />;
+      case 'stock-inventory':
+        return <StockInventory />;
       case 'task-reminder':
         return <TaskReminder />;
       case 'employees':

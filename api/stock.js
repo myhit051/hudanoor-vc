@@ -1,4 +1,4 @@
-import { getTursoClient, initStockSchema } from '../lib/turso.js';
+import { getTursoClient, initStockSchema, initSalesSchema } from '../lib/turso.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -9,12 +9,60 @@ export default async function handler(req, res) {
 
   try {
     await initStockSchema();
+    await initSalesSchema();
     const db = getTursoClient();
 
-    // GET /api/stock — ดึงรายการสต๊อกทั้งหมด
+    // GET /api/stock — ดึงรายการสต๊อก
     if (req.method === 'GET') {
-      const { date, sku, limit = 100, offset = 0 } = req.query;
+      const { date, sku, available, view, limit = 500, offset = 0 } = req.query;
 
+      // view=inventory — คืน aggregated สต๊อกคงเหลือ
+      if (view === 'inventory') {
+        const result = await db.execute({
+          sql: `
+            SELECT
+              s.sku,
+              s.product_name,
+              s.color,
+              s.size,
+              COALESCE(SUM(s.quantity), 0) AS total_in,
+              COALESCE(SUM(so.qty_sold), 0) AS total_sold,
+              COALESCE(SUM(s.quantity), 0) - COALESCE(SUM(so.qty_sold), 0) AS remaining
+            FROM stock_in s
+            LEFT JOIN (
+              SELECT sku, color, size, SUM(quantity) AS qty_sold
+              FROM sales_orders
+              GROUP BY sku, color, size
+            ) so ON s.sku = so.sku AND s.color = so.color AND s.size = so.size
+            GROUP BY s.sku, s.product_name, s.color, s.size
+            ORDER BY s.sku, s.color, s.size
+          `,
+          args: []
+        });
+        return res.status(200).json({ data: result.rows });
+      }
+
+      // available=true — คืนเฉพาะรายการที่ยังมีสต๊อก > 0
+      if (available === 'true') {
+        const result = await db.execute({
+          sql: `
+            SELECT
+              s.*,
+              s.quantity - COALESCE(SUM(so.quantity), 0) AS available_quantity
+            FROM stock_in s
+            LEFT JOIN sales_orders so
+              ON s.id = so.stock_in_id
+            GROUP BY s.id
+            HAVING available_quantity > 0
+            ORDER BY s.sku, s.color, s.size
+            LIMIT ?
+          `,
+          args: [Number(limit)]
+        });
+        return res.status(200).json({ data: result.rows });
+      }
+
+      // default — ดึงรายการสต๊อกทั้งหมด
       let query = 'SELECT * FROM stock_in WHERE 1=1';
       const args = [];
 

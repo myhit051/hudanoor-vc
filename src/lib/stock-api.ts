@@ -46,3 +46,31 @@ export async function deleteStockItem(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/stock?id=${id}`, { method: 'DELETE' });
   if (!res.ok) throw new Error('Failed to delete stock');
 }
+
+export interface AvailableStockItem extends StockItem {
+  available_quantity: number;
+}
+
+export interface StockInventoryItem {
+  sku: string;
+  product_name: string;
+  color: string;
+  size: string;
+  total_in: number;
+  total_sold: number;
+  remaining: number;
+}
+
+export async function getAvailableStock(): Promise<AvailableStockItem[]> {
+  const res = await fetch(`${API_BASE}/stock?available=true`);
+  if (!res.ok) throw new Error('Failed to fetch available stock');
+  const data = await res.json();
+  return data.data as AvailableStockItem[];
+}
+
+export async function getStockInventory(): Promise<StockInventoryItem[]> {
+  const res = await fetch(`${API_BASE}/stock?view=inventory`);
+  if (!res.ok) throw new Error('Failed to fetch stock inventory');
+  const data = await res.json();
+  return data.data as StockInventoryItem[];
+}

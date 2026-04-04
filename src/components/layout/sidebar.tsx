@@ -14,7 +14,9 @@ import {
   Users,
   FileText,
   Settings,
-  PackagePlus
+  PackagePlus,
+  ShoppingCart,
+  Package
 } from "lucide-react";
 
 interface SidebarProps {
@@ -38,6 +40,16 @@ const menuItems = [
     id: 'stock-receiving',
     label: 'รับสินค้าเข้าสต๊อก',
     icon: PackagePlus,
+  },
+  {
+    id: 'sales-entry',
+    label: 'บันทึกยอดขาย',
+    icon: ShoppingCart,
+  },
+  {
+    id: 'stock-inventory',
+    label: 'สต๊อกคงเหลือ',
+    icon: Package,
   },
   {
     id: 'task-reminder',
