@@ -8,6 +8,7 @@ import { TaskReminder } from "@/pages/TaskReminder";
 import { EmployeeManagement } from "@/pages/EmployeeManagement";
 import { UpdateLogs } from "@/pages/UpdateLogs";
 import { AppSettings } from "@/pages/AppSettings";
+import { StockReceiving } from "@/pages/StockReceiving";
 import { AddRecordForm } from "@/components/forms/add-record-form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useSheetsData } from "@/hooks/use-sheets-data";
@@ -41,6 +42,8 @@ export function MainLayout() {
     switch (currentPage) {
       case 'dashboard':
         return <Index />;
+      case 'stock-receiving':
+        return <StockReceiving />;
       case 'task-reminder':
         return <TaskReminder />;
       case 'employees':

@@ -5,15 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { ConnectionStatus } from "@/components/ui/connection-status";
-import { 
-  LayoutDashboard, 
-  Plus, 
-  CheckSquare, 
+import {
+  LayoutDashboard,
+  Plus,
+  CheckSquare,
   Menu,
   X,
   Users,
   FileText,
-  Settings
+  Settings,
+  PackagePlus
 } from "lucide-react";
 
 interface SidebarProps {
@@ -32,6 +33,11 @@ const menuItems = [
     id: 'add-record',
     label: 'บันทึกรายการใหม่',
     icon: Plus,
+  },
+  {
+    id: 'stock-receiving',
+    label: 'รับสินค้าเข้าสต๊อก',
+    icon: PackagePlus,
   },
   {
     id: 'task-reminder',

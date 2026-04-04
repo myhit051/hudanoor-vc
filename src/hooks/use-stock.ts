@@ -1,0 +1,47 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getStockItems, addStockItem, deleteStockItem, NewStockItem } from '@/lib/stock-api';
+import { toast } from '@/hooks/use-toast';
+
+export function useStock(params?: { date?: string; sku?: string }) {
+  const queryClient = useQueryClient();
+
+  const { data: stockItems = [], isLoading, refetch } = useQuery({
+    queryKey: ['stock', params],
+    queryFn: () => getStockItems(params),
+    staleTime: 30 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false
+  });
+
+  const addMutation = useMutation({
+    mutationFn: addStockItem,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast({ title: 'บันทึกสต๊อกสำเร็จ', description: 'เพิ่มรายการสต๊อกเข้าระบบแล้ว' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'เกิดข้อผิดพลาด', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteStockItem,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast({ title: 'ลบรายการสำเร็จ' });
+    },
+    onError: () => {
+      toast({ title: 'เกิดข้อผิดพลาด', description: 'ไม่สามารถลบรายการได้', variant: 'destructive' });
+    }
+  });
+
+  return {
+    stockItems,
+    isLoading,
+    refetch,
+    addStock: addMutation.mutate,
+    isAdding: addMutation.isPending,
+    deleteStock: deleteMutation.mutate,
+    isDeleting: deleteMutation.isPending
+  };
+}
