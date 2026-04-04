@@ -17,7 +17,6 @@ export function useStock(params?: { date?: string; sku?: string }) {
     mutationFn: addStockItem,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      toast({ title: 'บันทึกสต๊อกสำเร็จ', description: 'เพิ่มรายการสต๊อกเข้าระบบแล้ว' });
     },
     onError: (error: Error) => {
       toast({ title: 'เกิดข้อผิดพลาด', description: error.message, variant: 'destructive' });
@@ -39,7 +38,7 @@ export function useStock(params?: { date?: string; sku?: string }) {
     stockItems,
     isLoading,
     refetch,
-    addStock: addMutation.mutate,
+    addStock: addMutation.mutateAsync,
     isAdding: addMutation.isPending,
     deleteStock: deleteMutation.mutate,
     isDeleting: deleteMutation.isPending
