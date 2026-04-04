@@ -21,9 +21,10 @@ import { useSettings } from "@/hooks/use-settings";
 interface AddRecordFormProps {
   onSubmit: (record: Omit<Income, 'id' | 'createdAt' | 'updatedAt'> | Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => void;
   isSubmitting?: boolean;
+  onClose?: () => void;
 }
 
-export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormProps) {
+export function AddRecordForm({ onSubmit, isSubmitting = false, onClose }: AddRecordFormProps) {
   const { settings, refetch } = useSettings();
   const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income');
   const [date, setDate] = useState<Date>(new Date());
@@ -65,9 +66,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
     note: ''
   });
 
-  const handleIncomeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const handleIncomeSubmit = (closeAfter: boolean) => {
     if (!incomeForm.branch_or_platform || !incomeForm.product_name || !incomeForm.product_category) {
       toast({
         title: "กรุณากรอกข้อมูลให้ครบ",
@@ -85,25 +84,21 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
 
     onSubmit(record);
 
-    // Reset form
-    setIncomeForm({
-      branch_or_platform: '',
-      product_name: '',
-      product_category: '',
-      quantity: 1,
-      amount: 0,
-      note: ''
-    });
-
     toast({
       title: "บันทึกรายรับสำเร็จ",
-      description: `เพิ่มรายรับ ${incomeForm.product_name} จำนวน ${formatDate(date.toISOString())} แล้ว`
+      description: `เพิ่มรายรับ ${incomeForm.product_name} ในวันที่ ${formatDate(date.toISOString())} แล้ว`
     });
+
+    if (closeAfter) {
+      setIncomeForm({ branch_or_platform: '', product_name: '', product_category: '', quantity: 1, amount: 0, note: '' });
+      onClose?.();
+    } else {
+      // รีเซ็ตเฉพาะตัวเลข รอใส่ใหม่
+      setIncomeForm(prev => ({ ...prev, quantity: 1, amount: 0 }));
+    }
   };
 
-  const handleExpenseSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const handleExpenseSubmit = (closeAfter: boolean) => {
     if (!expenseForm.branch_or_platform || !expenseForm.expense_item || !expenseForm.expense_category) {
       toast({
         title: "กรุณากรอกข้อมูลให้ครบ",
@@ -121,19 +116,18 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
 
     onSubmit(record);
 
-    // Reset form
-    setExpenseForm({
-      branch_or_platform: '',
-      expense_item: '',
-      expense_category: '',
-      cost: 0,
-      note: ''
-    });
-
     toast({
       title: "บันทึกรายจ่ายสำเร็จ",
       description: `เพิ่มรายจ่าย ${expenseForm.expense_item} ในวันที่ ${formatDate(date.toISOString())} แล้ว`
     });
+
+    if (closeAfter) {
+      setExpenseForm({ branch_or_platform: '', expense_item: '', expense_category: '', cost: 0, note: '' });
+      onClose?.();
+    } else {
+      // รีเซ็ตเฉพาะตัวเลข รอใส่ใหม่
+      setExpenseForm(prev => ({ ...prev, cost: 0 }));
+    }
   };
 
   return (
@@ -200,7 +194,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
           </div>
 
           <TabsContent value="income">
-            <form onSubmit={handleIncomeSubmit} className="space-y-4">
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
               <div>
                 <div className="flex items-center justify-between">
                   <Label htmlFor="branch_platform_income">
@@ -310,28 +304,37 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
                 />
               </div>
 
-              <Button
-                type="submit"
-                className="w-full bg-income hover:bg-income/90"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    กำลังบันทึก...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4 mr-2" />
-                    บันทึกรายรับ
-                  </>
-                )}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  className="flex-1 bg-income hover:bg-income/90"
+                  disabled={isSubmitting}
+                  onClick={() => handleIncomeSubmit(false)}
+                >
+                  {isSubmitting ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      บันทึก
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 border-income text-income hover:bg-income/10"
+                  disabled={isSubmitting}
+                  onClick={() => handleIncomeSubmit(true)}
+                >
+                  บันทึกและปิด
+                </Button>
+              </div>
             </form>
           </TabsContent>
 
           <TabsContent value="expense">
-            <form onSubmit={handleExpenseSubmit} className="space-y-4">
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
               <div>
                 <Label htmlFor="branch_platform_expense">
                   {channel === 'store' ? 'สาขา *' : 'แพลตฟอร์ม *'}
@@ -412,23 +415,32 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
                 />
               </div>
 
-              <Button
-                type="submit"
-                className="w-full bg-expense hover:bg-expense/90"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    กำลังบันทึก...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4 mr-2" />
-                    บันทึกรายจ่าย
-                  </>
-                )}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  className="flex-1 bg-expense hover:bg-expense/90"
+                  disabled={isSubmitting}
+                  onClick={() => handleExpenseSubmit(false)}
+                >
+                  {isSubmitting ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4 mr-2" />
+                      บันทึก
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 border-expense text-expense hover:bg-expense/10"
+                  disabled={isSubmitting}
+                  onClick={() => handleExpenseSubmit(true)}
+                >
+                  บันทึกและปิด
+                </Button>
+              </div>
             </form>
           </TabsContent>
         </Tabs>

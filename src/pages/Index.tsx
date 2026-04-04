@@ -542,9 +542,10 @@ const Index = () => {
             <SheetTitle>เพิ่มรายการใหม่</SheetTitle>
           </SheetHeader>
           <div className="mt-6 overflow-y-auto h-full pb-6">
-            <AddRecordForm 
-              onSubmit={handleAddRecord} 
+            <AddRecordForm
+              onSubmit={handleAddRecord}
               isSubmitting={isAddingIncome || isAddingExpense}
+              onClose={() => setIsAddFormOpen(false)}
             />
           </div>
         </SheetContent>
