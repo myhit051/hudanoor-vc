@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getStockItems, addStockItem, deleteStockItem, NewStockItem } from '@/lib/stock-api';
+import { getStockItems, addStockItem, deleteStockItem, updateStockItem, NewStockItem, UpdateStockItem } from '@/lib/stock-api';
 import { toast } from '@/hooks/use-toast';
 
 export function useStock(params?: { date?: string; sku?: string }) {
@@ -34,6 +34,17 @@ export function useStock(params?: { date?: string; sku?: string }) {
     }
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: UpdateStockItem }) => updateStockItem(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast({ title: 'แก้ไขรายการสำเร็จ' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'เกิดข้อผิดพลาด', description: error.message, variant: 'destructive' });
+    }
+  });
+
   return {
     stockItems,
     isLoading,
@@ -41,6 +52,8 @@ export function useStock(params?: { date?: string; sku?: string }) {
     addStock: addMutation.mutateAsync,
     isAdding: addMutation.isPending,
     deleteStock: deleteMutation.mutate,
-    isDeleting: deleteMutation.isPending
+    isDeleting: deleteMutation.isPending,
+    updateStock: updateMutation.mutateAsync,
+    isUpdating: updateMutation.isPending
   };
 }

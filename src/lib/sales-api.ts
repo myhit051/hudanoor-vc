@@ -53,6 +53,18 @@ export async function addSalesOrder(order: NewSalesOrder): Promise<void> {
   }
 }
 
+export async function addSalesOrders(orders: NewSalesOrder[]): Promise<void> {
+  const res = await fetch(`${API_BASE}/sales`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(orders)
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to add sales');
+  }
+}
+
 export async function deleteSalesOrder(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/sales?id=${id}`, { method: 'DELETE' });
   if (!res.ok) {

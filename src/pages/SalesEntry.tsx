@@ -12,7 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, ShoppingCart, Trash2, ChevronsUpDown, Check } from "lucide-react";
+import { CalendarIcon, ShoppingCart, Trash2, ChevronsUpDown, Check, Plus, PackageCheck } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { useSales } from "@/hooks/use-sales";
 import { useSettings } from "@/hooks/use-settings";
@@ -28,9 +28,7 @@ const toLocalDateStr = (d: Date) => {
   return `${y}-${m}-${day}`;
 };
 
-const emptyForm = {
-  channel: '',
-  branch_or_platform: '',
+const emptyItemForm = {
   stock_in_id: '',
   sku: '',
   product_name: '',
@@ -43,13 +41,23 @@ const emptyForm = {
   note: ''
 };
 
+interface CartItem extends typeof emptyItemForm {
+  cartId: string;
+  discountAmount: number;
+  finalUnitPrice: number;
+  totalAmount: number;
+}
+
 export function SalesEntry() {
   const [date, setDate] = useState<Date>(new Date());
-  const [form, setForm] = useState(emptyForm);
+  const [channel, setChannel] = useState('');
+  const [branchOrPlatform, setBranchOrPlatform] = useState('');
+  const [itemForm, setItemForm] = useState(emptyItemForm);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [stockComboOpen, setStockComboOpen] = useState(false);
 
-  const { salesOrders, isLoading, addSale, isAdding, deleteSale } = useSales();
+  const { salesOrders, isLoading, addSales, isAddingBatch, deleteSale } = useSales();
   const { settings } = useSettings();
 
   const { data: availableStock = [] } = useQuery({
@@ -59,16 +67,16 @@ export function SalesEntry() {
     refetchOnWindowFocus: false
   });
 
-  const handleSet = (key: string, value: any) =>
-    setForm(prev => ({ ...prev, [key]: value }));
+  const handleItemSet = (key: string, value: any) =>
+    setItemForm(prev => ({ ...prev, [key]: value }));
 
-  // เมื่อเลือกสาขา/แพลตฟอร์ม reset branch
-  const handleChannelChange = (v: string) =>
-    setForm(prev => ({ ...prev, channel: v, branch_or_platform: '' }));
+  const handleChannelChange = (v: string) => {
+    setChannel(v);
+    setBranchOrPlatform('');
+  };
 
-  // Auto-fill เมื่อเลือกสินค้าจาก Combobox
   const handleSelectStock = (item: AvailableStockItem) => {
-    setForm(prev => ({
+    setItemForm(prev => ({
       ...prev,
       stock_in_id: item.id,
       sku: item.sku,
@@ -80,63 +88,98 @@ export function SalesEntry() {
     setStockComboOpen(false);
   };
 
-  // รายชื่อสาขา/แพลตฟอร์มตาม channel
   const branchOptions: string[] = useMemo(() => {
-    if (form.channel === 'store') return settings?.branchesByChannel?.store || [];
-    if (form.channel === 'online') return settings?.branchesByChannel?.online || [];
+    if (channel === 'store') return settings?.branchesByChannel?.store || [];
+    if (channel === 'online') return settings?.branchesByChannel?.online || [];
     return [];
-  }, [form.channel, settings]);
+  }, [channel, settings]);
 
-  // คำนวณส่วนลดและราคาสุทธิ real-time
+  // คำนวณส่วนลด real-time สำหรับ item ที่กำลังกรอก
   const discountAmount = useMemo(() => {
-    const price = Number(form.unit_price) || 0;
-    const val = Number(form.discount_value) || 0;
-    if (form.discount_type === 'percent') return price * (val / 100);
+    const price = Number(itemForm.unit_price) || 0;
+    const val = Number(itemForm.discount_value) || 0;
+    if (itemForm.discount_type === 'percent') return price * (val / 100);
     return Math.min(val, price);
-  }, [form.unit_price, form.discount_type, form.discount_value]);
+  }, [itemForm.unit_price, itemForm.discount_type, itemForm.discount_value]);
 
   const finalUnitPrice = useMemo(() => {
-    const price = Number(form.unit_price) || 0;
+    const price = Number(itemForm.unit_price) || 0;
     return Math.max(0, price - discountAmount);
-  }, [form.unit_price, discountAmount]);
+  }, [itemForm.unit_price, discountAmount]);
 
   const totalAmount = useMemo(() => {
-    return finalUnitPrice * (Number(form.quantity) || 1);
-  }, [finalUnitPrice, form.quantity]);
+    return finalUnitPrice * (Number(itemForm.quantity) || 1);
+  }, [finalUnitPrice, itemForm.quantity]);
 
-  const validate = () => {
-    if (!form.stock_in_id) { toast({ title: 'กรุณาเลือกสินค้า', variant: 'destructive' }); return false; }
-    if (!form.channel) { toast({ title: 'กรุณาเลือกช่องทางการขาย', variant: 'destructive' }); return false; }
-    if (!form.branch_or_platform) { toast({ title: 'กรุณาเลือกสาขา/แพลตฟอร์ม', variant: 'destructive' }); return false; }
-    if ((Number(form.quantity) || 0) < 1) { toast({ title: 'จำนวนต้องมากกว่า 0', variant: 'destructive' }); return false; }
+  // ยอดรวมทั้ง cart
+  const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.totalAmount, 0), [cart]);
+  const cartQty = useMemo(() => cart.reduce((s, i) => s + Number(i.quantity), 0), [cart]);
+
+  const selectedStockLabel = itemForm.stock_in_id
+    ? `${itemForm.sku} — ${itemForm.product_name}${itemForm.color ? ` (${itemForm.color}` : ''}${itemForm.size ? ` ${itemForm.size})` : itemForm.color ? ')' : ''}`
+    : '';
+
+  const handleAddToCart = () => {
+    if (!itemForm.stock_in_id) {
+      toast({ title: 'กรุณาเลือกสินค้า', variant: 'destructive' });
+      return;
+    }
+    if ((Number(itemForm.quantity) || 0) < 1) {
+      toast({ title: 'จำนวนต้องมากกว่า 0', variant: 'destructive' });
+      return;
+    }
+    const cartItem: CartItem = {
+      ...itemForm,
+      cartId: `${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+      discountAmount,
+      finalUnitPrice,
+      totalAmount
+    };
+    setCart(prev => [...prev, cartItem]);
+    setItemForm(emptyItemForm);
+  };
+
+  const handleRemoveFromCart = (cartId: string) => {
+    setCart(prev => prev.filter(i => i.cartId !== cartId));
+  };
+
+  const validateAndSave = () => {
+    if (!channel) { toast({ title: 'กรุณาเลือกช่องทางการขาย', variant: 'destructive' }); return false; }
+    if (!branchOrPlatform) { toast({ title: 'กรุณาเลือกสาขา/แพลตฟอร์ม', variant: 'destructive' }); return false; }
+    if (cart.length === 0) { toast({ title: 'กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ', variant: 'destructive' }); return false; }
     return true;
   };
 
-  const buildOrder = (): NewSalesOrder => ({
-    date: toLocalDateStr(date),
-    channel: form.channel,
-    branch_or_platform: form.branch_or_platform,
-    sku: form.sku,
-    product_name: form.product_name,
-    color: form.color,
-    size: form.size,
-    quantity: Number(form.quantity) || 1,
-    unit_price: Number(form.unit_price) || 0,
-    discount_type: form.discount_type,
-    discount_value: Number(form.discount_value) || 0,
-    note: form.note,
-    stock_in_id: form.stock_in_id
-  });
+  const buildOrders = (): NewSalesOrder[] =>
+    cart.map(item => ({
+      date: toLocalDateStr(date),
+      channel,
+      branch_or_platform: branchOrPlatform,
+      sku: item.sku,
+      product_name: item.product_name,
+      color: item.color,
+      size: item.size,
+      quantity: Number(item.quantity) || 1,
+      unit_price: Number(item.unit_price) || 0,
+      discount_type: item.discount_type,
+      discount_value: Number(item.discount_value) || 0,
+      note: item.note,
+      stock_in_id: item.stock_in_id
+    }));
 
   const handleSave = () => {
-    if (!validate()) return;
-    addSale(buildOrder());
+    if (!validateAndSave()) return;
+    addSales(buildOrders());
   };
 
   const handleSaveAndClear = () => {
-    if (!validate()) return;
-    addSale(buildOrder(), {
-      onSuccess: () => setForm(emptyForm)
+    if (!validateAndSave()) return;
+    addSales(buildOrders(), {
+      onSuccess: () => {
+        setCart([]);
+        setChannel('');
+        setBranchOrPlatform('');
+      }
     });
   };
 
@@ -145,11 +188,6 @@ export function SalesEntry() {
   const todayOrders = salesOrders.filter(o => o.date === todayStr);
   const todayTotal = todayOrders.reduce((s, o) => s + Number(o.total_amount), 0);
   const todayQty = todayOrders.reduce((s, o) => s + Number(o.quantity), 0);
-
-  // label แสดงสินค้าที่เลือกใน Combobox
-  const selectedStockLabel = form.stock_in_id
-    ? `${form.sku} — ${form.product_name}${form.color ? ` (${form.color}` : ''}${form.size ? ` ${form.size})` : form.color ? ')' : ''}`
-    : '';
 
   return (
     <div className="space-y-6">
@@ -170,7 +208,7 @@ export function SalesEntry() {
           </CardHeader>
           <CardContent className="space-y-4">
 
-            {/* วันที่ขาย */}
+            {/* วันที่ + ช่องทาง + สาขา (ใช้ร่วมทั้ง transaction) */}
             <div>
               <Label>วันที่ขาย</Label>
               <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
@@ -192,11 +230,10 @@ export function SalesEntry() {
               </Popover>
             </div>
 
-            {/* ช่องทาง + สาขา */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>ช่องทาง <span className="text-red-500">*</span></Label>
-                <Select value={form.channel} onValueChange={handleChannelChange}>
+                <Select value={channel} onValueChange={handleChannelChange}>
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="เลือกช่องทาง" />
                   </SelectTrigger>
@@ -209,12 +246,12 @@ export function SalesEntry() {
               <div>
                 <Label>สาขา/แพลตฟอร์ม <span className="text-red-500">*</span></Label>
                 <Select
-                  value={form.branch_or_platform}
-                  onValueChange={v => handleSet('branch_or_platform', v)}
-                  disabled={!form.channel}
+                  value={branchOrPlatform}
+                  onValueChange={setBranchOrPlatform}
+                  disabled={!channel}
                 >
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder={form.channel ? 'เลือก' : 'เลือกช่องทางก่อน'} />
+                    <SelectValue placeholder={channel ? 'เลือก' : 'เลือกช่องทางก่อน'} />
                   </SelectTrigger>
                   <SelectContent>
                     {branchOptions.map(b => (
@@ -225,173 +262,232 @@ export function SalesEntry() {
               </div>
             </div>
 
-            {/* เลือกสินค้า (Combobox) */}
-            <div>
-              <Label>สินค้า <span className="text-red-500">*</span></Label>
-              <Popover open={stockComboOpen} onOpenChange={setStockComboOpen}>
-                <PopoverTrigger asChild>
+            {/* เส้นแบ่ง: ส่วนเพิ่มสินค้า */}
+            <div className="border-t pt-4">
+              <p className="text-sm font-medium text-muted-foreground mb-3">เพิ่มสินค้าในรายการ</p>
+
+              {/* เลือกสินค้า */}
+              <div className="space-y-3">
+                <div>
+                  <Label>สินค้า <span className="text-red-500">*</span></Label>
+                  <Popover open={stockComboOpen} onOpenChange={setStockComboOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className={cn(
+                          "w-full justify-between mt-1 font-normal",
+                          !itemForm.stock_in_id && "text-muted-foreground"
+                        )}
+                      >
+                        <span className="truncate">
+                          {itemForm.stock_in_id ? selectedStockLabel : 'ค้นหา SKU หรือชื่อสินค้า...'}
+                        </span>
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="พิมพ์ SKU หรือชื่อสินค้า..." />
+                        <CommandList>
+                          <CommandEmpty>ไม่พบสินค้าในสต๊อก</CommandEmpty>
+                          <CommandGroup>
+                            {availableStock.map(item => (
+                              <CommandItem
+                                key={item.id}
+                                value={`${item.sku} ${item.product_name} ${item.color} ${item.size}`}
+                                onSelect={() => handleSelectStock(item)}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    itemForm.stock_in_id === item.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                <div className="flex flex-col flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-xs text-muted-foreground">{item.sku}</span>
+                                    <span className="font-medium truncate">{item.product_name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    {item.color && <span>{item.color}</span>}
+                                    {item.size && <span>{item.size}</span>}
+                                    <Badge variant="outline" className="text-xs py-0">
+                                      เหลือ {item.available_quantity} ชิ้น
+                                    </Badge>
+                                  </div>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="quantity">จำนวน (ชิ้น)</Label>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      min="1"
+                      className="mt-1"
+                      value={itemForm.quantity}
+                      onChange={e => handleItemSet('quantity', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="unit_price">ราคาขาย/ชิ้น (บาท)</Label>
+                    <Input
+                      id="unit_price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="mt-1"
+                      value={itemForm.unit_price}
+                      onChange={e => handleItemSet('unit_price', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>ส่วนลด</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Select
+                      value={itemForm.discount_type}
+                      onValueChange={v => { handleItemSet('discount_type', v); handleItemSet('discount_value', 0); }}
+                    >
+                      <SelectTrigger className="w-24 shrink-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="amount">บาท</SelectItem>
+                        <SelectItem value="percent">%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      max={itemForm.discount_type === 'percent' ? 100 : undefined}
+                      placeholder={itemForm.discount_type === 'percent' ? 'เช่น 10' : 'เช่น 50'}
+                      value={itemForm.discount_value}
+                      onChange={e => handleItemSet('discount_value', e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* สรุปราคา real-time */}
+                <div className="bg-rose-50 dark:bg-rose-950/40 rounded-lg p-3 space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">ราคาต่อชิ้น</span>
+                    <span>฿{Number(itemForm.unit_price).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-rose-600">
+                    <span>ส่วนลด</span>
+                    <span>- ฿{discountAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between font-medium border-t pt-1">
+                    <span>ราคาสุทธิ/ชิ้น</span>
+                    <span>฿{finalUnitPrice.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-base text-rose-600">
+                    <span>ยอดรวม ({itemForm.quantity} ชิ้น)</span>
+                    <span>฿{totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="note">หมายเหตุ (รายการนี้)</Label>
+                  <Textarea
+                    id="note"
+                    className="mt-1"
+                    value={itemForm.note}
+                    onChange={e => handleItemSet('note', e.target.value)}
+                    placeholder="เพิ่มหมายเหตุ (ถ้ามี)"
+                    rows={2}
+                  />
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="w-full border-rose-400 text-rose-600 hover:bg-rose-50"
+                  onClick={handleAddToCart}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  เพิ่มลงรายการ
+                </Button>
+              </div>
+            </div>
+
+            {/* Cart */}
+            {cart.length > 0 && (
+              <div className="border-t pt-4 space-y-3">
+                <p className="text-sm font-medium">รายการที่จะบันทึก ({cart.length} รายการ)</p>
+                <div className="space-y-2">
+                  {cart.map(item => (
+                    <div key={item.cartId} className="flex items-start gap-2 bg-muted/40 rounded-lg p-3 text-sm">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{item.product_name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {item.sku}{item.color ? ` · ${item.color}` : ''}{item.size ? ` ${item.size}` : ''}
+                        </div>
+                        <div className="text-xs mt-1">
+                          {item.quantity} ชิ้น × ฿{Number(item.unit_price).toLocaleString('th-TH')}
+                          {item.discountAmount > 0 && (
+                            <span className="text-rose-500"> (ลด ฿{item.discountAmount.toLocaleString('th-TH')})</span>
+                          )}
+                          <span className="font-semibold ml-1">= ฿{item.totalAmount.toLocaleString('th-TH')}</span>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0 h-7 w-7 p-0"
+                        onClick={() => handleRemoveFromCart(item.cartId)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ยอดรวม cart */}
+                <div className="bg-orange-50 dark:bg-orange-950/40 rounded-lg p-3 flex justify-between items-center">
+                  <span className="text-sm font-medium">ยอดรวมทั้งหมด ({cartQty} ชิ้น)</span>
+                  <span className="text-lg font-bold text-orange-600">฿{cartTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                </div>
+
+                {/* Buttons บันทึก */}
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white"
+                    disabled={isAddingBatch}
+                    onClick={handleSave}
+                  >
+                    {isAddingBatch
+                      ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      : <><PackageCheck className="h-4 w-4 mr-2" />บันทึก {cart.length} รายการ</>}
+                  </Button>
                   <Button
                     variant="outline"
-                    role="combobox"
-                    className={cn(
-                      "w-full justify-between mt-1 font-normal",
-                      !form.stock_in_id && "text-muted-foreground"
-                    )}
+                    className="flex-1 border-rose-400 text-rose-500 hover:bg-rose-50"
+                    disabled={isAddingBatch}
+                    onClick={handleSaveAndClear}
                   >
-                    <span className="truncate">
-                      {form.stock_in_id ? selectedStockLabel : 'ค้นหา SKU หรือชื่อสินค้า...'}
-                    </span>
-                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    บันทึกและล้างฟอร์ม
                   </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0" align="start">
-                  <Command>
-                    <CommandInput placeholder="พิมพ์ SKU หรือชื่อสินค้า..." />
-                    <CommandList>
-                      <CommandEmpty>ไม่พบสินค้าในสต๊อก</CommandEmpty>
-                      <CommandGroup>
-                        {availableStock.map(item => (
-                          <CommandItem
-                            key={item.id}
-                            value={`${item.sku} ${item.product_name} ${item.color} ${item.size}`}
-                            onSelect={() => handleSelectStock(item)}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                form.stock_in_id === item.id ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <div className="flex flex-col flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-xs text-muted-foreground">{item.sku}</span>
-                                <span className="font-medium truncate">{item.product_name}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                {item.color && <span>{item.color}</span>}
-                                {item.size && <span>{item.size}</span>}
-                                <Badge variant="outline" className="text-xs py-0">
-                                  เหลือ {item.available_quantity} ชิ้น
-                                </Badge>
-                              </div>
-                            </div>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-            </div>
+                </div>
+              </div>
+            )}
 
-            {/* จำนวน + ราคาขาย */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="quantity">จำนวน (ชิ้น)</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  className="mt-1"
-                  value={form.quantity}
-                  onChange={e => handleSet('quantity', e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="unit_price">ราคาขาย/ชิ้น (บาท)</Label>
-                <Input
-                  id="unit_price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="mt-1"
-                  value={form.unit_price}
-                  onChange={e => handleSet('unit_price', e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* ส่วนลด */}
-            <div>
-              <Label>ส่วนลด</Label>
-              <div className="flex gap-2 mt-1">
-                <Select
-                  value={form.discount_type}
-                  onValueChange={v => { handleSet('discount_type', v); handleSet('discount_value', 0); }}
-                >
-                  <SelectTrigger className="w-24 shrink-0">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="amount">บาท</SelectItem>
-                    <SelectItem value="percent">%</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  max={form.discount_type === 'percent' ? 100 : undefined}
-                  placeholder={form.discount_type === 'percent' ? 'เช่น 10' : 'เช่น 50'}
-                  value={form.discount_value}
-                  onChange={e => handleSet('discount_value', e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* สรุปราคา real-time */}
-            <div className="bg-rose-50 dark:bg-rose-950/40 rounded-lg p-3 space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">ราคาต่อชิ้น</span>
-                <span>฿{Number(form.unit_price).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between text-rose-600">
-                <span>ส่วนลด</span>
-                <span>- ฿{discountAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between font-medium border-t pt-1">
-                <span>ราคาสุทธิ/ชิ้น</span>
-                <span>฿{finalUnitPrice.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex justify-between font-bold text-base text-rose-600">
-                <span>ยอดรวม ({form.quantity} ชิ้น)</span>
-                <span>฿{totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-
-            {/* หมายเหตุ */}
-            <div>
-              <Label htmlFor="note">หมายเหตุ</Label>
-              <Textarea
-                id="note"
-                className="mt-1"
-                value={form.note}
-                onChange={e => handleSet('note', e.target.value)}
-                placeholder="เพิ่มหมายเหตุ (ถ้ามี)"
-                rows={2}
-              />
-            </div>
-
-            {/* Buttons */}
-            <div className="flex gap-2 pt-2">
-              <Button
-                className="flex-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white"
-                disabled={isAdding}
-                onClick={handleSave}
-              >
-                {isAdding
-                  ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  : 'บันทึก'}
-              </Button>
-              <Button
-                variant="outline"
-                className="flex-1 border-rose-400 text-rose-500 hover:bg-rose-50"
-                disabled={isAdding}
-                onClick={handleSaveAndClear}
-              >
-                บันทึกและล้างฟอร์ม
-              </Button>
-            </div>
+            {cart.length === 0 && (
+              <p className="text-center text-sm text-muted-foreground py-2">
+                ยังไม่มีสินค้าในรายการ — กดเพิ่มลงรายการด้านบน
+              </p>
+            )}
           </CardContent>
         </Card>
 

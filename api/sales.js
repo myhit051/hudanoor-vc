@@ -39,80 +39,88 @@ export default async function handler(req, res) {
       return res.status(200).json({ data: result.rows });
     }
 
-    // POST /api/sales — บันทึกยอดขาย + หักสต๊อก (batch)
+    // POST /api/sales — บันทึกยอดขาย + หักสต๊อก (รองรับทั้ง single object และ array)
     if (req.method === 'POST') {
-      const {
-        date, channel, branch_or_platform,
-        sku, product_name, color, size,
-        quantity, unit_price,
-        discount_type, discount_value,
-        note, stock_in_id
-      } = req.body;
-
-      if (!date || !sku || !product_name || !stock_in_id) {
-        return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบ (date, sku, product_name, stock_in_id)' });
-      }
-
-      const qty = Number(quantity) || 1;
-      const price = Number(unit_price) || 0;
-      const discVal = Number(discount_value) || 0;
-      const discType = discount_type === 'percent' ? 'percent' : 'amount';
-
-      // คำนวณส่วนลด
-      let discountAmount = 0;
-      let finalUnitPrice = price;
-      if (discType === 'percent') {
-        discountAmount = price * (discVal / 100);
-        finalUnitPrice = price - discountAmount;
-      } else {
-        discountAmount = discVal;
-        finalUnitPrice = price - discVal;
-      }
-      if (finalUnitPrice < 0) finalUnitPrice = 0;
-      const totalAmount = finalUnitPrice * qty;
-
-      // ตรวจสอบสต๊อกคงเหลือ
-      const stockCheck = await db.execute({
-        sql: `
-          SELECT s.quantity - COALESCE(SUM(so.quantity), 0) AS available
-          FROM stock_in s
-          LEFT JOIN sales_orders so ON s.id = so.stock_in_id
-          WHERE s.id = ?
-          GROUP BY s.id
-        `,
-        args: [stock_in_id]
-      });
-
-      const available = stockCheck.rows[0]?.available ?? 0;
-      if (Number(available) < qty) {
-        return res.status(400).json({ error: `สต๊อกไม่เพียงพอ (คงเหลือ ${available} ชิ้น)` });
-      }
-
-      const id = `sale_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const items = Array.isArray(req.body) ? req.body : [req.body];
       const now = new Date().toISOString();
 
-      // batch: insert sales_order + deduct stock_in
-      await db.batch([
-        {
+      // ตรวจสอบข้อมูลและคำนวณ
+      const processed = [];
+      for (const item of items) {
+        const { date, channel, branch_or_platform, sku, product_name, color, size,
+                quantity, unit_price, discount_type, discount_value, note, stock_in_id } = item;
+
+        if (!date || !sku || !product_name || !stock_in_id) {
+          return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบ (date, sku, product_name, stock_in_id)' });
+        }
+
+        const qty = Number(quantity) || 1;
+        const price = Number(unit_price) || 0;
+        const discVal = Number(discount_value) || 0;
+        const discType = discount_type === 'percent' ? 'percent' : 'amount';
+
+        let discountAmount = 0;
+        let finalUnitPrice = price;
+        if (discType === 'percent') {
+          discountAmount = price * (discVal / 100);
+          finalUnitPrice = price - discountAmount;
+        } else {
+          discountAmount = discVal;
+          finalUnitPrice = price - discVal;
+        }
+        if (finalUnitPrice < 0) finalUnitPrice = 0;
+        const totalAmount = finalUnitPrice * qty;
+
+        processed.push({ date, channel, branch_or_platform, sku, product_name, color, size,
+          qty, price, discType, discVal, discountAmount, finalUnitPrice, totalAmount,
+          note, stock_in_id });
+      }
+
+      // ตรวจสอบสต๊อกทุกรายการ (รวม qty ของ stock_in_id เดียวกัน)
+      const stockNeeds = {};
+      for (const p of processed) {
+        stockNeeds[p.stock_in_id] = (stockNeeds[p.stock_in_id] || 0) + p.qty;
+      }
+      for (const [sid, needed] of Object.entries(stockNeeds)) {
+        const stockCheck = await db.execute({
+          sql: `SELECT s.quantity - COALESCE(SUM(so.quantity), 0) AS available
+                FROM stock_in s
+                LEFT JOIN sales_orders so ON s.id = so.stock_in_id
+                WHERE s.id = ?
+                GROUP BY s.id`,
+          args: [sid]
+        });
+        const available = stockCheck.rows[0]?.available ?? 0;
+        if (Number(available) < needed) {
+          return res.status(400).json({ error: `สต๊อกไม่เพียงพอสำหรับ stock_in_id ${sid} (คงเหลือ ${available} ต้องการ ${needed} ชิ้น)` });
+        }
+      }
+
+      // batch: insert ทุก sale + deduct stock ทุกรายการ
+      const batchOps = [];
+      for (const p of processed) {
+        const id = `sale_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        batchOps.push({
           sql: `INSERT INTO sales_orders
                   (id, date, channel, branch_or_platform, sku, product_name, color, size,
                    quantity, unit_price, discount_type, discount_value, discount_amount,
                    final_unit_price, total_amount, note, stock_in_id, created_at)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           args: [
-            id, date, channel || '', branch_or_platform || '',
-            sku, product_name, color || '', size || '',
-            qty, price, discType, discVal, discountAmount,
-            finalUnitPrice, totalAmount, note || '', stock_in_id, now
+            id, p.date, p.channel || '', p.branch_or_platform || '',
+            p.sku, p.product_name, p.color || '', p.size || '',
+            p.qty, p.price, p.discType, p.discVal, p.discountAmount,
+            p.finalUnitPrice, p.totalAmount, p.note || '', p.stock_in_id, now
           ]
-        },
-        {
+        });
+        batchOps.push({
           sql: `UPDATE stock_in SET quantity = quantity - ?, updated_at = ? WHERE id = ?`,
-          args: [qty, now, stock_in_id]
-        }
-      ]);
+          args: [p.qty, now, p.stock_in_id]
+        });
+      }
+      await db.batch(batchOps);
 
-      return res.status(201).json({ success: true, id });
+      return res.status(201).json({ success: true, count: processed.length });
     }
 
     // DELETE /api/sales?id=xxx — ลบยอดขาย + คืนสต๊อก (batch)

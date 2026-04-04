@@ -47,6 +47,20 @@ export async function deleteStockItem(id: string): Promise<void> {
   if (!res.ok) throw new Error('Failed to delete stock');
 }
 
+export type UpdateStockItem = Partial<Pick<StockItem, 'quantity' | 'cost_price' | 'sell_price' | 'note' | 'product_name' | 'date'>>;
+
+export async function updateStockItem(id: string, data: UpdateStockItem): Promise<void> {
+  const res = await fetch(`${API_BASE}/stock?id=${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to update stock');
+  }
+}
+
 export interface AvailableStockItem extends StockItem {
   available_quantity: number;
 }

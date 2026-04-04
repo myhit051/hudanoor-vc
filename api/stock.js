@@ -2,7 +2,7 @@ import { getTursoClient, initStockSchema, initSalesSchema } from '../lib/turso.j
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -107,6 +107,44 @@ export default async function handler(req, res) {
       });
 
       return res.status(201).json({ success: true, id });
+    }
+
+    // PUT /api/stock — แก้ไขสต๊อก
+    if (req.method === 'PUT') {
+      const { id } = req.query;
+      if (!id) return res.status(400).json({ error: 'Missing id' });
+
+      const { quantity, cost_price, sell_price, note, product_name, date } = req.body;
+      const now = new Date().toISOString();
+
+      // ตรวจสอบว่าปริมาณไม่ต่ำกว่าที่ขายไปแล้ว
+      if (quantity !== undefined) {
+        const soldResult = await db.execute({
+          sql: `SELECT COALESCE(SUM(so.quantity), 0) AS qty_sold FROM sales_orders so WHERE so.stock_in_id = ?`,
+          args: [id]
+        });
+        const qtySold = Number(soldResult.rows[0]?.qty_sold || 0);
+        if (Number(quantity) < qtySold) {
+          return res.status(400).json({ error: `ไม่สามารถลดจำนวนต่ำกว่าที่ขายไปแล้ว (${qtySold} ชิ้น)` });
+        }
+      }
+
+      const fields = [];
+      const args = [];
+      if (quantity !== undefined) { fields.push('quantity = ?'); args.push(Number(quantity)); }
+      if (cost_price !== undefined) { fields.push('cost_price = ?'); args.push(Number(cost_price)); }
+      if (sell_price !== undefined) { fields.push('sell_price = ?'); args.push(Number(sell_price)); }
+      if (note !== undefined) { fields.push('note = ?'); args.push(note); }
+      if (product_name !== undefined) { fields.push('product_name = ?'); args.push(product_name); }
+      if (date !== undefined) { fields.push('date = ?'); args.push(date); }
+
+      if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+      fields.push('updated_at = ?');
+      args.push(now, id);
+
+      await db.execute({ sql: `UPDATE stock_in SET ${fields.join(', ')} WHERE id = ?`, args });
+      return res.status(200).json({ success: true });
     }
 
     // DELETE /api/stock?id=xxx
