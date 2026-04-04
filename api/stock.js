@@ -1,4 +1,4 @@
-import { getTursoClient, initStockSchema, initSalesSchema } from '../lib/turso.js';
+import { getTursoClient, initSchema } from '../lib/turso.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -8,8 +8,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    await initStockSchema();
-    await initSalesSchema();
+    await initSchema();
     const db = getTursoClient();
 
     // GET /api/stock — ดึงรายการสต๊อก
