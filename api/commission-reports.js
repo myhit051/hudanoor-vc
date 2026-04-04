@@ -48,7 +48,12 @@ export default async function handler(req, res) {
         const incomeData = incomeResponse.data.values || [];
 
         // Parse employees
-        const employees = employeesData.slice(1).filter(row => row[0] && row[0].trim() !== '').map(row => {
+        const employees = employeesData.slice(1).filter(row => row[0] && row[0].trim() !== '').map((row, index) => {
+          // Debug: Log salary data for troubleshooting
+          if (index === 0) {
+            console.log('Commission Reports - Sample employee data:');
+            console.log('Raw salary value:', row[6], 'Type:', typeof row[6]);
+          }
           let branchCommissions = [];
           try {
             if (row[8] && typeof row[8] === 'string') {
@@ -65,7 +70,41 @@ export default async function handler(req, res) {
             email: row[3] || '',
             phone: row[4] || '',
             startDate: row[5] || '',
-            salary: parseFloat(row[6]) || 0,
+            salary: (() => {
+              const salaryValue = row[6];
+              let parsed = 0;
+              
+              if (salaryValue === null || salaryValue === undefined || salaryValue === '') {
+                return 0;
+              }
+              
+              if (typeof salaryValue === 'string') {
+                // Remove commas, currency symbols, whitespace, and other formatting
+                let cleanValue = salaryValue.replace(/[,฿$\s\u00A0\u2000-\u200B\u2028\u2029]/g, '');
+                
+                // Handle decimal points
+                if (cleanValue.includes('.')) {
+                  parsed = parseFloat(cleanValue);
+                } else {
+                  parsed = parseInt(cleanValue, 10);
+                }
+              } else if (typeof salaryValue === 'number') {
+                parsed = salaryValue;
+              } else {
+                // Try to convert to string first, then parse
+                const stringValue = String(salaryValue);
+                const cleanValue = stringValue.replace(/[,฿$\s\u00A0\u2000-\u200B\u2028\u2029]/g, '');
+                parsed = parseFloat(cleanValue);
+              }
+              
+              // Validate the result
+              if (isNaN(parsed) || !isFinite(parsed)) {
+                console.warn(`Invalid salary value for employee: "${salaryValue}" (type: ${typeof salaryValue})`);
+                return 0;
+              }
+              
+              return parsed;
+            })(),
             isActive: row[7] === 'active',
             branchCommissions: Array.isArray(branchCommissions) ? branchCommissions : []
           };

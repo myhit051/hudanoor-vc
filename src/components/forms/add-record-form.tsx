@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +31,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
 
   // Debug: แสดงข้อมูล branches ใน console
   console.log('AddRecordForm - Current branchesByChannel:', settings.branchesByChannel);
-  
+
   // Get available branches based on selected channel
   const getAvailableBranches = (channel: Channel): string[] => {
     if (!settings.branchesByChannel) {
@@ -39,7 +39,13 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
     }
     return settings.branchesByChannel[channel] || [];
   };
-  
+
+  // Reset branch selection when channel changes
+  useEffect(() => {
+    setIncomeForm(prev => ({ ...prev, branch_or_platform: '' }));
+    setExpenseForm(prev => ({ ...prev, branch_or_platform: '' }));
+  }, [channel]);
+
   // Income form state
   const [incomeForm, setIncomeForm] = useState({
     branch_or_platform: '',
@@ -61,7 +67,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
 
   const handleIncomeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!incomeForm.branch_or_platform || !incomeForm.product_name || !incomeForm.product_category) {
       toast({
         title: "กรุณากรอกข้อมูลให้ครบ",
@@ -78,7 +84,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
     };
 
     onSubmit(record);
-    
+
     // Reset form
     setIncomeForm({
       branch_or_platform: '',
@@ -88,7 +94,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
       amount: 0,
       note: ''
     });
-    
+
     toast({
       title: "บันทึกรายรับสำเร็จ",
       description: `เพิ่มรายรับ ${incomeForm.product_name} จำนวน ${formatDate(date.toISOString())} แล้ว`
@@ -97,7 +103,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
 
   const handleExpenseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!expenseForm.branch_or_platform || !expenseForm.expense_item || !expenseForm.expense_category) {
       toast({
         title: "กรุณากรอกข้อมูลให้ครบ",
@@ -114,7 +120,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
     };
 
     onSubmit(record);
-    
+
     // Reset form
     setExpenseForm({
       branch_or_platform: '',
@@ -123,7 +129,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
       cost: 0,
       note: ''
     });
-    
+
     toast({
       title: "บันทึกรายจ่ายสำเร็จ",
       description: `เพิ่มรายจ่าย ${expenseForm.expense_item} ในวันที่ ${formatDate(date.toISOString())} แล้ว`
@@ -200,34 +206,40 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
                   <Label htmlFor="branch_platform_income">
                     {channel === 'store' ? 'สาขา *' : 'แพลตฟอร์ม *'}
                   </Label>
-                  <Button 
-                    type="button" 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => refetch()}
                     className="text-xs h-6 px-2"
                   >
                     รีเฟรช
                   </Button>
                 </div>
-                <Select 
-                  value={incomeForm.branch_or_platform} 
+                <Select
+                  value={incomeForm.branch_or_platform}
                   onValueChange={(value) => setIncomeForm(prev => ({ ...prev, branch_or_platform: value }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="เลือกสาขา/แพลตฟอร์ม" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(settings.branches || ['สาขาหลัก']).map((branch: string) => (
-                      <SelectItem key={branch} value={branch}>
-                        {branch}
+                    {getAvailableBranches(channel).length > 0 ? (
+                      getAvailableBranches(channel).map((branch: string) => (
+                        <SelectItem key={branch} value={branch}>
+                          {branch}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="" disabled>
+                        ไม่มีตัวเลือกสำหรับช่องทาง{channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}
                       </SelectItem>
-                    ))}
+                    )}
                   </SelectContent>
                 </Select>
                 {/* Debug info */}
                 <div className="text-xs text-muted-foreground mt-1">
-                  ตัวเลือกปัจจุบัน: {settings.branches?.length || 0} รายการ
+                  ตัวเลือกสำหรับ{channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}: {getAvailableBranches(channel).length} รายการ
                 </div>
               </div>
 
@@ -244,8 +256,8 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
 
               <div>
                 <Label htmlFor="product_category">หมวดหมู่สินค้า *</Label>
-                <Select 
-                  value={incomeForm.product_category} 
+                <Select
+                  value={incomeForm.product_category}
                   onValueChange={(value) => setIncomeForm(prev => ({ ...prev, product_category: value }))}
                 >
                   <SelectTrigger>
@@ -298,8 +310,8 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
                 />
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full bg-income hover:bg-income/90"
                 disabled={isSubmitting}
               >
@@ -324,19 +336,25 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
                 <Label htmlFor="branch_platform_expense">
                   {channel === 'store' ? 'สาขา *' : 'แพลตฟอร์ม *'}
                 </Label>
-                <Select 
-                  value={expenseForm.branch_or_platform} 
+                <Select
+                  value={expenseForm.branch_or_platform}
                   onValueChange={(value) => setExpenseForm(prev => ({ ...prev, branch_or_platform: value }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="เลือกสาขา/แพลตฟอร์ม" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(settings.branches || ['สาขาหลัก']).map((branch: string) => (
-                      <SelectItem key={branch} value={branch}>
-                        {branch}
+                    {getAvailableBranches(channel).length > 0 ? (
+                      getAvailableBranches(channel).map((branch: string) => (
+                        <SelectItem key={branch} value={branch}>
+                          {branch}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="" disabled>
+                        ไม่มีตัวเลือกสำหรับช่องทาง{channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}
                       </SelectItem>
-                    ))}
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -354,8 +372,8 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
 
               <div>
                 <Label htmlFor="expense_category">หมวดหมู่จ่าย *</Label>
-                <Select 
-                  value={expenseForm.expense_category} 
+                <Select
+                  value={expenseForm.expense_category}
                   onValueChange={(value) => setExpenseForm(prev => ({ ...prev, expense_category: value }))}
                 >
                   <SelectTrigger>
@@ -394,8 +412,8 @@ export function AddRecordForm({ onSubmit, isSubmitting = false }: AddRecordFormP
                 />
               </div>
 
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full bg-expense hover:bg-expense/90"
                 disabled={isSubmitting}
               >

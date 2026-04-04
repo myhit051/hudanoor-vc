@@ -11,11 +11,23 @@ const parseEmployeeData = (rows: any[][]): Employee[] => {
   
   // Skip header row and filter out empty rows
   return rows.slice(1).filter(row => row[0] && row[0].trim() !== '').map((row, index) => {
+    // Debug: Log first employee's salary data
+    if (index === 0) {
+      console.log('Vercel Employees - Sample salary data:');
+      console.log('Raw salary value:', row[6], 'Type:', typeof row[6]);
+    }
     // Parse salary with proper number conversion
     const salaryValue = row[6];
-    const parsedSalary = typeof salaryValue === 'string' ? 
-      parseFloat(salaryValue.replace(/,/g, '')) : // Remove commas if present
-      parseFloat(salaryValue) || 0;
+    const parsedSalary = (() => {
+      if (typeof salaryValue === 'string') {
+        // Remove commas, currency symbols, and whitespace
+        const cleanValue = salaryValue.replace(/[,฿$\s]/g, '');
+        const parsed = parseFloat(cleanValue);
+        return isNaN(parsed) ? 0 : parsed;
+      }
+      const parsed = parseFloat(salaryValue);
+      return isNaN(parsed) ? 0 : parsed;
+    })();
     
     // Parse branch commissions from JSON
     const branchCommissionsValue = row[8];

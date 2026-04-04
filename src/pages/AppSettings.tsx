@@ -18,7 +18,8 @@ import {
   List,
   Plus,
   X,
-  Tag
+  Tag,
+  Building
 } from "lucide-react";
 
 const colorOptions = [
