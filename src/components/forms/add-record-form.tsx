@@ -66,6 +66,13 @@ export function AddRecordForm({ onSubmit, isSubmitting = false, onClose }: AddRe
     note: ''
   });
 
+  const toLocalDateStr = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
   const handleIncomeSubmit = (closeAfter: boolean) => {
     if (!incomeForm.branch_or_platform || !incomeForm.product_name || !incomeForm.product_category) {
       toast({
@@ -77,7 +84,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false, onClose }: AddRe
     }
 
     const record: Omit<Income, 'id' | 'createdAt' | 'updatedAt'> = {
-      date: date.toISOString(),
+      date: toLocalDateStr(date),
       channel,
       ...incomeForm
     };
@@ -86,7 +93,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false, onClose }: AddRe
 
     toast({
       title: "บันทึกรายรับสำเร็จ",
-      description: `เพิ่มรายรับ ${incomeForm.product_name} ในวันที่ ${formatDate(date.toISOString())} แล้ว`
+      description: `เพิ่มรายรับ ${incomeForm.product_name} ในวันที่ ${formatDate(toLocalDateStr(date))} แล้ว`
     });
 
     if (closeAfter) {
@@ -109,7 +116,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false, onClose }: AddRe
     }
 
     const record: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'> = {
-      date: date.toISOString(),
+      date: toLocalDateStr(date),
       channel,
       ...expenseForm
     };
@@ -118,7 +125,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false, onClose }: AddRe
 
     toast({
       title: "บันทึกรายจ่ายสำเร็จ",
-      description: `เพิ่มรายจ่าย ${expenseForm.expense_item} ในวันที่ ${formatDate(date.toISOString())} แล้ว`
+      description: `เพิ่มรายจ่าย ${expenseForm.expense_item} ในวันที่ ${formatDate(toLocalDateStr(date))} แล้ว`
     });
 
     if (closeAfter) {
@@ -163,7 +170,7 @@ export function AddRecordForm({ onSubmit, isSubmitting = false, onClose }: AddRe
                     )}
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? formatDate(date.toISOString()) : "เลือกวันที่"}
+                    {date ? formatDate(toLocalDateStr(date)) : "เลือกวันที่"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">

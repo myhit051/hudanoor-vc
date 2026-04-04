@@ -294,7 +294,6 @@ const Index = () => {
       } else {
         await addExpense(record);
       }
-      setIsAddFormOpen(false);
     } catch (error) {
       console.error('Error adding record:', error);
     }
