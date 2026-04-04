@@ -169,7 +169,9 @@ export function SalesEntry() {
 
   const handleSave = () => {
     if (!validateAndSave()) return;
-    addSales(buildOrders());
+    addSales(buildOrders(), {
+      onSuccess: () => setCart([])
+    });
   };
 
   const handleSaveAndClear = () => {
