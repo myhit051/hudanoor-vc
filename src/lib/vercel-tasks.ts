@@ -141,7 +141,7 @@ export const initializeTasksSheet = async (): Promise<void> => {
       'ID', 'Title', 'Type', 'Amount', 'Note', 'DueDate', 'Completed', 'CreatedAt'
     ];
 
-    const response = await fetch(`${API_BASE}/sheets/update`, {
+    const response = await fetch(`${API_BASE}/sheets?action=update`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',

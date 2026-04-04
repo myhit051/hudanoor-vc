@@ -51,7 +51,7 @@ const parseExpenseData = (rows: any[][]): Expense[] => {
 // Read income data from Google Sheets via Vercel API
 export const getIncomeData = async (): Promise<Income[]> => {
   try {
-    const response = await fetch(`${API_BASE}/sheets/read?range=${encodeURIComponent(INCOME_SHEET)}!A:K`);
+    const response = await fetch(`${API_BASE}/sheets?action=read&range=${encodeURIComponent(INCOME_SHEET)}!A:K`);
     
     if (!response.ok) {
       const errorData = await response.json();
@@ -69,7 +69,7 @@ export const getIncomeData = async (): Promise<Income[]> => {
 // Read expense data from Google Sheets via Vercel API
 export const getExpenseData = async (): Promise<Expense[]> => {
   try {
-    const response = await fetch(`${API_BASE}/sheets/read?range=${encodeURIComponent(EXPENSE_SHEET)}!A:J`);
+    const response = await fetch(`${API_BASE}/sheets?action=read&range=${encodeURIComponent(EXPENSE_SHEET)}!A:J`);
     
     if (!response.ok) {
       const errorData = await response.json();
@@ -104,7 +104,7 @@ export const addIncomeRecord = async (income: Omit<Income, 'id' | 'createdAt' | 
       now
     ];
 
-    const response = await fetch(`${API_BASE}/sheets/write`, {
+    const response = await fetch(`${API_BASE}/sheets?action=write`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -146,7 +146,7 @@ export const addExpenseRecord = async (expense: Omit<Expense, 'id' | 'createdAt'
       now
     ];
 
-    const response = await fetch(`${API_BASE}/sheets/write`, {
+    const response = await fetch(`${API_BASE}/sheets?action=write`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -185,7 +185,7 @@ export const initializeSheets = async (): Promise<void> => {
     ];
 
     // Initialize income sheet
-    const incomeResponse = await fetch(`${API_BASE}/sheets/update`, {
+    const incomeResponse = await fetch(`${API_BASE}/sheets?action=update`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -202,7 +202,7 @@ export const initializeSheets = async (): Promise<void> => {
     }
 
     // Initialize expense sheet
-    const expenseResponse = await fetch(`${API_BASE}/sheets/update`, {
+    const expenseResponse = await fetch(`${API_BASE}/sheets?action=update`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
