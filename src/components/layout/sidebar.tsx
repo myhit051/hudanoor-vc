@@ -10,7 +10,6 @@ import {
   Plus,
   CheckSquare,
   Menu,
-  X,
   Users,
   FileText,
   Settings,
@@ -25,51 +24,30 @@ interface SidebarProps {
   onAddRecord: () => void;
 }
 
-const menuItems = [
+const menuGroups = [
   {
-    id: 'dashboard',
-    label: 'Dashboard',
-    icon: LayoutDashboard,
+    label: "ภาพรวม",
+    items: [
+      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    ],
   },
   {
-    id: 'add-record',
-    label: 'บันทึกรายการใหม่',
-    icon: Plus,
+    label: "จัดการ",
+    items: [
+      { id: "add-record",       label: "บันทึกรายการใหม่", icon: Plus },
+      { id: "stock-receiving",  label: "รับสินค้าเข้าสต๊อก", icon: PackagePlus },
+      { id: "sales-entry",      label: "บันทึกยอดขาย",    icon: ShoppingCart },
+      { id: "stock-inventory",  label: "สต๊อกคงเหลือ",    icon: Package },
+      { id: "task-reminder",    label: "Task Reminder",    icon: CheckSquare },
+      { id: "employees",        label: "จัดการพนักงาน",   icon: Users },
+    ],
   },
   {
-    id: 'stock-receiving',
-    label: 'รับสินค้าเข้าสต๊อก',
-    icon: PackagePlus,
-  },
-  {
-    id: 'sales-entry',
-    label: 'บันทึกยอดขาย',
-    icon: ShoppingCart,
-  },
-  {
-    id: 'stock-inventory',
-    label: 'สต๊อกคงเหลือ',
-    icon: Package,
-  },
-  {
-    id: 'task-reminder',
-    label: 'Task Reminder',
-    icon: CheckSquare,
-  },
-  {
-    id: 'employees',
-    label: 'จัดการพนักงาน',
-    icon: Users,
-  },
-  {
-    id: 'update-logs',
-    label: 'Update Logs',
-    icon: FileText,
-  },
-  {
-    id: 'settings',
-    label: 'การตั้งค่า',
-    icon: Settings,
+    label: "ระบบ",
+    items: [
+      { id: "update-logs", label: "Update Logs", icon: FileText },
+      { id: "settings",    label: "การตั้งค่า",  icon: Settings },
+    ],
   },
 ];
 
@@ -77,7 +55,7 @@ export function Sidebar({ currentPage, onPageChange, onAddRecord }: SidebarProps
   const [isOpen, setIsOpen] = useState(false);
 
   const handleMenuClick = (itemId: string) => {
-    if (itemId === 'add-record') {
+    if (itemId === "add-record") {
       onAddRecord();
     } else {
       onPageChange(itemId);
@@ -87,54 +65,79 @@ export function Sidebar({ currentPage, onPageChange, onAddRecord }: SidebarProps
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+      {/* Brand Header */}
+      <div className="p-5 border-b border-gray-100 dark:border-gray-800">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-r from-rose-500 to-pink-500 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">H</span>
+          {/* SVG Brand mark */}
+          <div className="w-9 h-9 flex-shrink-0">
+            <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+              <rect width="36" height="36" rx="10" fill="url(#brandGrad)" />
+              <text
+                x="18" y="24"
+                textAnchor="middle"
+                fontSize="18"
+                fontWeight="700"
+                fontFamily="Rubik, sans-serif"
+                fill="white"
+                letterSpacing="-1"
+              >H</text>
+              <defs>
+                <linearGradient id="brandGrad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#f43f5e" />
+                  <stop offset="1" stopColor="#ec4899" />
+                </linearGradient>
+              </defs>
+            </svg>
           </div>
+
           <div>
-            <h2 className="font-bold text-lg bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">
+            <h2
+              className="font-bold text-lg leading-tight bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent"
+              style={{ fontFamily: "'Rubik', sans-serif" }}
+            >
               HUDANOOR
             </h2>
-            <p className="text-xs text-muted-foreground">ระบบบันทึกรายรับ-รายจ่าย</p>
+            <p className="text-xs text-muted-foreground leading-tight">เสื้อผ้าแฟชั่นมุสลิม</p>
           </div>
         </div>
       </div>
 
-      {/* Menu Items */}
-      <nav className="flex-1 p-4">
-        <div className="space-y-2">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentPage === item.id;
-            
-            return (
-              <Button
-                key={item.id}
-                variant={isActive ? "default" : "ghost"}
-                className={cn(
-                  "w-full justify-start gap-3 h-12",
-                  isActive 
-                    ? "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg" 
-                    : "hover:bg-gray-100 dark:hover:bg-gray-800"
-                )}
-                onClick={() => handleMenuClick(item.id)}
-              >
-                <Icon className="h-5 w-5" />
-                <span className="font-medium">{item.label}</span>
-              </Button>
-            );
-          })}
-        </div>
+      {/* Navigation Groups */}
+      <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
+        {menuGroups.map((group) => (
+          <div key={group.label}>
+            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 select-none">
+              {group.label}
+            </p>
+            <div className="space-y-0.5">
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = currentPage === item.id;
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleMenuClick(item.id)}
+                    className={cn(
+                      "relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer",
+                      isActive
+                        ? "sidebar-item-active text-white"
+                        : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100"
+                    )}
+                    aria-current={isActive ? "page" : undefined}
+                  >
+                    <Icon className={cn("h-4 w-4 flex-shrink-0", isActive ? "text-white" : "")} />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="text-xs text-muted-foreground text-center mb-2">
-          เสื้อผ้าแฟชั่นมุสลิม
-        </div>
-        {/* Connection Status in Sidebar */}
+      <div className="p-4 border-t border-gray-100 dark:border-gray-800">
         <div className="flex justify-center">
           <ConnectionStatus />
         </div>
@@ -145,14 +148,15 @@ export function Sidebar({ currentPage, onPageChange, onAddRecord }: SidebarProps
   return (
     <>
       {/* Desktop Sidebar */}
-      <div className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 lg:z-50 lg:bg-white lg:dark:bg-gray-900 lg:border-r lg:border-gray-200 lg:dark:border-gray-700">
+      <div className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 lg:z-50 lg:bg-white lg:dark:bg-gray-900 lg:border-r lg:border-gray-100 lg:dark:border-gray-800 shadow-sm">
         <SidebarContent />
       </div>
 
-      {/* Mobile Sidebar */}
+      {/* Mobile Hamburger + Sheet */}
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetTrigger asChild>
           <Button
+            id="mobile-menu-button"
             variant="ghost"
             size="sm"
             className="lg:hidden fixed top-4 left-4 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-200 dark:border-gray-700"
@@ -167,3 +171,4 @@ export function Sidebar({ currentPage, onPageChange, onAddRecord }: SidebarProps
     </>
   );
 }
+

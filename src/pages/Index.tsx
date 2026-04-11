@@ -11,6 +11,8 @@ import { TopCategoriesTable } from "@/components/dashboard/top-categories-table"
 import { SalesTarget } from "@/components/dashboard/sales-target";
 import { MonthlyBreakdownChart } from "@/components/dashboard/monthly-breakdown-chart";
 import { BranchComparisonChart } from "@/components/dashboard/branch-comparison-chart";
+import { KpiCards } from "@/components/dashboard/kpi-cards";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { AddRecordForm } from "@/components/forms/add-record-form";
 import { FloatingActionButton } from "@/components/ui/floating-action-button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -22,7 +24,7 @@ import { useSheetsData } from "@/hooks/use-sheets-data";
 import { useSettings } from "@/hooks/use-settings";
 import { Income, Expense, DashboardSummary, ChartData, CategoryData, ChannelData, FilterOptions, TopCategoryData } from "@/types";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Search, TrendingUp, BarChart3, PieChart, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Search, TrendingUp, BarChart3, PieChart, Loader2, AlertCircle, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -300,16 +302,9 @@ const Index = () => {
     }
   };
 
-  // Loading state
+  // Loading state — full-page skeleton
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">กำลังโหลดข้อมูลจาก Google Sheets...</p>
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   // Error state
@@ -364,14 +359,16 @@ const Index = () => {
               </Button>
               
               <ThemeToggle />
-              
-              <div className="relative hidden md:block">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+
+              {/* Search — visible on all screen sizes */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
+                  id="dashboard-search"
                   placeholder="ค้นหารายการ..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
+                  className="pl-10 w-36 md:w-64 transition-all duration-200 focus:w-48 md:focus:w-72"
                 />
               </div>
               
@@ -405,7 +402,10 @@ const Index = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6">
+      <main className="container mx-auto px-4 py-6 page-enter">
+        {/* KPI Summary Cards */}
+        <KpiCards summary={summary} />
+
         {/* Filters */}
         <DashboardFilters
           filters={filters}
@@ -430,12 +430,12 @@ const Index = () => {
         {/* Data Filter Warning */}
         {(filters.dateFrom || filters.dateTo || filters.channels?.length || filters.branches?.length || filters.productCategories?.length || filters.expenseCategories?.length || filters.q) && (
           <div className="mb-6">
-            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
-                <span className="text-lg">⚠️</span>
+            <div className="filter-info-banner border rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                 <div>
-                  <p className="font-medium">ข้อมูลที่แสดงถูกกรองแล้ว</p>
-                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                  <p className="font-medium text-sm">ข้อมูลที่แสดงถูกกรองแล้ว</p>
+                  <p className="text-sm opacity-80">
                     ยอดขายรวมและสถิติต่างๆ แสดงเฉพาะข้อมูลที่ตรงกับตัวกรองที่เลือก หากต้องการดูข้อมูลทั้งหมด กรุณาล้างตัวกรอง
                   </p>
                 </div>

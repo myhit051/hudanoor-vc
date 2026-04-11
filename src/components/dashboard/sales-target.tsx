@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { DashboardSummary } from "@/types";
 import { formatCurrency } from "@/lib/utils";
-import { Target, Edit3, TrendingUp, Award } from "lucide-react";
+import { Target, Edit3, TrendingUp, Award, AlertTriangle, PartyPopper } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
@@ -205,8 +205,8 @@ export function SalesTarget({ summary, onTargetUpdate, filters }: SalesTargetPro
                   {formatCurrency(summary.totalIncome)}
                 </div>
                 {(filters.dateFrom || filters.dateTo || filters.channels?.length || filters.branches?.length || filters.productCategories?.length || filters.q) && (
-                  <div className="text-xs text-amber-600 dark:text-amber-400 mt-1 flex items-center gap-1">
-                    <span>⚠️</span>
+                  <div className="text-xs mt-1 flex items-center gap-1" style={{color: 'hsl(var(--info-text))'}}>
+                    <AlertTriangle className="h-3 w-3" />
                     <span>ข้อมูลถูกกรองแล้ว</span>
                   </div>
                 )}
@@ -235,7 +235,8 @@ export function SalesTarget({ summary, onTargetUpdate, filters }: SalesTargetPro
               {achieved ? (
                 <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-6 py-3 rounded-full inline-flex items-center gap-2 shadow-lg hover:shadow-xl transition-all duration-300 animate-pulse">
                   <Award className="h-5 w-5" />
-                  <span className="font-semibold">🎉 บรรลุเป้าหมายแล้ว!</span>
+                  <span className="font-semibold">บรรลุเป้าหมายแล้ว!</span>
+                  <PartyPopper className="h-4 w-4" />
                 </div>
               ) : (
                 <div className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-6 py-3 rounded-full inline-flex items-center gap-2 shadow-lg hover:shadow-xl transition-all duration-300">

@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git pull:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(npx tsc:*)",
+      "Bash(openspec list:*)",
+      "Bash(turso db:*)",
+      "Bash(winget list:*)",
+      "Bash(iwr https://windows.turso.tech -useb)",
+      "Bash(iex)",
+      "Bash(powershell:*)",
+      "Bash(wsl:*)",
+      "Bash(npm install:*)",
+      "Bash(ls:*)",
+      "Bash(node:*)",
+      "Bash(npm run:*)",
+      "Bash(npx vercel:*)",
+      "Bash(curl:*)",
+      "Bash(printf '%s' 'libsql://hudanoor-myhit.aws-ap-northeast-1.turso.io')",
+      "Bash(printf '%s' 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzUyNzcwNDgsImlkIjoiMDE5ZDU2YzEtZGQwMS03NjVlLTkyOTctNTVmYzFmZDEzOGQ2IiwicmlkIjoiN2ZkZjdhNmMtZTgzNi00NTRjLTg0Y2UtOTBiOWI2YjZhMjkyIn0.d8_Cxev0l-1Kc_VzVSHHdqif4-Id_sGuaxQMFNxTI0JmimSqq6ORcCEUmdCuSK6ZgqU2uY9fvrAy0Jf1tI2uCA')",
+      "Bash(mkdir -p D:/hudanoor-vc/openspec/changes/add-sales-entry/specs/sales-entry)",
+      "Bash(mkdir -p D:/hudanoor-vc/openspec/changes/add-sales-entry/specs/stock-inventory)",
+      "Bash(openspec validate:*)",
+      "Bash(wmic logicaldisk:*)",
+      "Bash(xargs grep:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

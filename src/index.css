@@ -3,9 +3,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ============================================================
+   HUDANOOR Design System — Powered by UI/UX Pro Max Skill
+   Fonts: Rubik (heading) + Nunito Sans (body)
+   Primary: Rose/Pink brand | Style: Clean Dashboard
+   ============================================================ */
 
 @layer base {
   :root {
@@ -35,18 +37,25 @@ All colors MUST be HSL.
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 330 81% 60%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    /* Custom design tokens for HUDANOOR */
+    /* HUDANOOR Brand Tokens */
     --hero-bg: linear-gradient(135deg, hsl(330, 81%, 60%) 0%, hsl(340, 82%, 52%) 100%);
     --income-color: 142 76% 36%;
     --expense-color: 0 84% 60%;
     --profit-color: 47 93% 40%;
     --chart-gradient: linear-gradient(180deg, hsla(330, 81%, 60%, 0.8) 0%, hsla(330, 81%, 60%, 0.1) 100%);
-    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    --card-hover-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+    --card-hover-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -4px rgba(0, 0, 0, 0.06);
+    --sidebar-width: 16rem;
+
+    /* Info color for filter warnings */
+    --info: 213 94% 68%;
+    --info-bg: 213 100% 97%;
+    --info-border: 213 94% 78%;
+    --info-text: 213 80% 35%;
   }
 
   .dark {
@@ -76,11 +85,15 @@ All colors MUST be HSL.
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --ring: 330 81% 60%;
 
-    /* Dark mode custom tokens */
+    /* Dark mode tokens */
     --hero-bg: linear-gradient(135deg, hsl(330, 81%, 45%) 0%, hsl(340, 82%, 40%) 100%);
     --chart-gradient: linear-gradient(180deg, hsla(330, 81%, 45%, 0.8) 0%, hsla(330, 81%, 45%, 0.1) 100%);
+    --info: 213 94% 68%;
+    --info-bg: 213 50% 12%;
+    --info-border: 213 50% 25%;
+    --info-text: 213 80% 70%;
   }
 }
 
@@ -90,13 +103,121 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground;
+    font-family: 'Nunito Sans', 'Inter', system-ui, sans-serif;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Rubik', 'Inter', system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 }
 
 @layer components {
+  /* Brand gradient */
   .hero-gradient {
     background: var(--hero-bg);
+  }
+
+  /* Card shadows */
+  .card-elevated {
+    box-shadow: var(--card-shadow);
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
+  }
+  .card-elevated:hover {
+    box-shadow: var(--card-hover-shadow);
+    transform: translateY(-1px);
+  }
+
+  /* KPI metric colors */
+  .income-color  { color: hsl(var(--income-color)); }
+  .expense-color { color: hsl(var(--expense-color)); }
+  .profit-color  { color: hsl(var(--profit-color)); }
+  .bg-income     { background-color: hsl(var(--income-color)); }
+  .bg-expense    { background-color: hsl(var(--expense-color)); }
+  .bg-profit     { background-color: hsl(var(--profit-color)); }
+
+  /* Filter info banner (replaces amber) */
+  .filter-info-banner {
+    background-color: hsl(var(--info-bg));
+    border-color: hsl(var(--info-border));
+    color: hsl(var(--info-text));
+  }
+
+  /* Skeleton loader */
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-muted;
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255,255,255,0.5) 50%,
+      transparent 100%
+    );
+    animation: shimmer 1.5s infinite;
+  }
+  .dark .skeleton::after {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255,255,255,0.08) 50%,
+      transparent 100%
+    );
+  }
+
+  /* Sidebar active state */
+  .sidebar-item-active {
+    @apply bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg;
+    box-shadow: 0 4px 15px -2px rgba(244, 63, 94, 0.4);
+  }
+  .sidebar-item-active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: white;
+    border-radius: 0 2px 2px 0;
+    opacity: 0.8;
+  }
+
+  /* Page transitions */
+  .page-enter {
+    animation: page-fade-in 0.3s ease-out;
+  }
+}
+
+/* ============================================================
+   Keyframe Animations
+   ============================================================ */
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-count-up {
+  animation: count-up 0.5s ease-out forwards;
+}
+
+
   }
   
   .card-elevated {
