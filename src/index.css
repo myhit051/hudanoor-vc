@@ -218,38 +218,3 @@
 }
 
 
-  }
-  
-  .card-elevated {
-    box-shadow: var(--card-shadow);
-    transition: box-shadow 0.2s ease-in-out;
-  }
-  
-  .card-elevated:hover {
-    box-shadow: var(--card-hover-shadow);
-  }
-  
-  .income-color {
-    color: hsl(var(--income-color));
-  }
-  
-  .expense-color {
-    color: hsl(var(--expense-color));
-  }
-  
-  .profit-color {
-    color: hsl(var(--profit-color));
-  }
-  
-  .bg-income {
-    background-color: hsl(var(--income-color));
-  }
-  
-  .bg-expense {
-    background-color: hsl(var(--expense-color));
-  }
-  
-  .bg-profit {
-    background-color: hsl(var(--profit-color));
-  }
-}
