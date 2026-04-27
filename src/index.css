@@ -217,4 +217,56 @@
   animation: count-up 0.5s ease-out forwards;
 }
 
+/* ============================================================
+   Mobile Responsive Utilities
+   ============================================================ */
 
+/* Safe area padding for iOS notch/dynamic island */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Prevent iOS zoom on input focus (must be 16px+) */
+@media screen and (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Smooth scrolling everywhere */
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hide scrollbar but keep scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Touch-friendly tap targets (min 44px as per Apple HIG) */
+@media screen and (max-width: 768px) {
+  button, [role="button"], a {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Smaller card padding on mobile */
+  .card-elevated {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+}
+
+/* Prevent text selection on buttons */
+button, [role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}

@@ -87,7 +87,7 @@ export default function AdminPanel() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div className="flex items-center gap-3">
           <ShieldAlert className="h-6 w-6 text-purple-600" />
           <div>
@@ -97,7 +97,7 @@ export default function AdminPanel() {
         </div>
         <Button
           onClick={() => { setIsEditing(false); setCurrentUser({ role: 'employee', allowed_menus: ['dashboard'] }); }}
-          className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+          className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 w-full sm:w-auto"
         >
           <UserPlus className="h-4 w-4 mr-2" />
           เพิ่มผู้ใช้งานใหม่
@@ -171,7 +171,7 @@ export default function AdminPanel() {
             {currentUser.role === 'employee' && (
               <div className="space-y-2">
                 <label className="text-sm font-medium">สิทธิ์การเข้าถึงเมนู</label>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 border p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 border p-3 sm:p-4 rounded-lg bg-gray-50 dark:bg-gray-800/50">
                   {MENU_OPTIONS.map(menu => (
                     <div key={menu.id} className="flex items-center space-x-2">
                       <Checkbox
@@ -203,28 +203,29 @@ export default function AdminPanel() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Desktop Table */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-800 text-left text-xs uppercase text-gray-500">
                 <tr>
-                  <th className="px-6 py-3 font-medium">รหัสพนักงาน</th>
-                  <th className="px-6 py-3 font-medium">ชื่อ</th>
-                  <th className="px-6 py-3 font-medium">Role</th>
-                  <th className="px-6 py-3 font-medium">สถานะ</th>
-                  <th className="px-6 py-3 font-medium text-right">จัดการ</th>
+                  <th className="px-4 sm:px-6 py-3 font-medium">รหัสพนักงาน</th>
+                  <th className="px-4 sm:px-6 py-3 font-medium">ชื่อ</th>
+                  <th className="px-4 sm:px-6 py-3 font-medium">Role</th>
+                  <th className="px-4 sm:px-6 py-3 font-medium">สถานะ</th>
+                  <th className="px-4 sm:px-6 py-3 font-medium text-right">จัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {users.map(user => (
                   <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                    <td className="px-6 py-4 font-mono text-sm">{user.employee_id}</td>
-                    <td className="px-6 py-4 font-medium">{user.name}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 sm:px-6 py-4 font-mono text-sm">{user.employee_id}</td>
+                    <td className="px-4 sm:px-6 py-4 font-medium">{user.name}</td>
+                    <td className="px-4 sm:px-6 py-4">
                       <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${user.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'}`}>
                         {user.role === 'admin' ? 'ผู้ดูแลระบบ' : 'พนักงาน'}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-4 sm:px-6 py-4">
                       <div className="flex items-center space-x-2">
                         <Switch
                           checked={user.is_active === 1}
@@ -235,7 +236,7 @@ export default function AdminPanel() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-4 sm:px-6 py-4 text-right">
                       <Button variant="outline" size="sm" onClick={() => {
                         setCurrentUser({ ...user, pin: '' });
                         setIsEditing(true);
@@ -254,6 +255,45 @@ export default function AdminPanel() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card Layout */}
+          <div className="sm:hidden divide-y divide-gray-200 dark:divide-gray-700">
+            {users.map(user => (
+              <div key={user.id} className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{user.name}</p>
+                    <p className="text-xs font-mono text-muted-foreground">{user.employee_id}</p>
+                  </div>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${user.role === 'admin' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'}`}>
+                    {user.role === 'admin' ? 'ผู้ดูแลระบบ' : 'พนักงาน'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={user.is_active === 1}
+                      onCheckedChange={() => handleToggleActive(user)}
+                    />
+                    <span className={`text-sm ${user.is_active ? 'text-green-600' : 'text-red-500'}`}>
+                      {user.is_active ? 'Active' : 'Disabled'}
+                    </span>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => {
+                    setCurrentUser({ ...user, pin: '' });
+                    setIsEditing(true);
+                  }}>
+                    แก้ไข
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {users.length === 0 && (
+              <div className="p-8 text-center text-gray-500">
+                ยังไม่มีผู้ใช้งานในระบบ
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

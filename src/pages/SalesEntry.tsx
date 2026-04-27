@@ -583,10 +583,10 @@ export function SalesEntry() {
                   value={group.order_id || `legacy-${idx}`}
                   className="border-b last:border-0"
                 >
-                  <AccordionTrigger className="hover:no-underline px-5 py-4 hover:bg-muted/40 transition-colors cursor-pointer">
-                    <div className="flex items-center justify-between w-full mr-3 gap-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex flex-col items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-br from-rose-100 to-pink-100 dark:from-rose-900/40 dark:to-pink-900/40 shrink-0">
+                  <AccordionTrigger className="hover:no-underline px-3 sm:px-5 py-3 sm:py-4 hover:bg-muted/40 transition-colors cursor-pointer">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full mr-3 gap-2 sm:gap-4">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                        <div className="flex flex-col items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-rose-100 to-pink-100 dark:from-rose-900/40 dark:to-pink-900/40 shrink-0">
                           <span className="text-[10px] font-medium text-rose-500 leading-none">
                             {new Date(group.created_at || group.date).toLocaleDateString('th-TH', { day: '2-digit' })}
                           </span>
@@ -595,7 +595,7 @@ export function SalesEntry() {
                           </span>
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                             <span className="text-sm font-semibold truncate">{group.order_id || '-'}</span>
                             <Badge
                               variant="outline"
@@ -609,14 +609,14 @@ export function SalesEntry() {
                               {group.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}
                             </Badge>
                           </div>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <span className="text-xs text-muted-foreground">{group.branch_or_platform}</span>
-                            <span className="text-xs text-muted-foreground">•</span>
-                            <span className="text-xs text-muted-foreground">โดย {group.recorded_by || '-'}</span>
+                            <span className="text-xs text-muted-foreground hidden sm:inline">•</span>
+                            <span className="text-xs text-muted-foreground hidden sm:inline">โดย {group.recorded_by || '-'}</span>
                             {group.created_at && (
                               <>
-                                <span className="text-xs text-muted-foreground">•</span>
-                                <span className="text-xs text-muted-foreground">
+                                <span className="text-xs text-muted-foreground hidden sm:inline">•</span>
+                                <span className="text-xs text-muted-foreground hidden sm:inline">
                                   {new Date(group.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
                                 </span>
                               </>
@@ -624,7 +624,7 @@ export function SalesEntry() {
                           </div>
                         </div>
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="text-right shrink-0 ml-12 sm:ml-0">
                         <p className="text-sm font-bold text-rose-600">
                           ฿{group.total_amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                         </p>

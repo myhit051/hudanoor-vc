@@ -284,7 +284,7 @@ export function StockReceiving() {
         <CardContent className="space-y-5">
 
           {/* Row 1: SKU + ชื่อสินค้า */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="sku">SKU <span className="text-red-500">*</span></Label>
               <Input
@@ -308,7 +308,7 @@ export function StockReceiving() {
           </div>
 
           {/* Row 2: ราคา + copy */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="cost_price">ราคาต้นทุน (บาท) <span className="text-red-500">*</span></Label>
               <Input
@@ -411,8 +411,8 @@ export function StockReceiving() {
                 <Label>จำนวนสินค้า (Tab เพื่อเลื่อนช่อง)</Label>
                 <span className="text-sm font-semibold text-rose-600">รวม {gridTotal} ชิ้น</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="border-collapse">
+              <div className="overflow-x-auto -mx-2 px-2 pb-2 scrollbar-hide">
+                <table className="border-collapse min-w-[400px]">
                   <thead>
                     <tr>
                       <th className="text-left text-sm font-medium text-muted-foreground pb-2 pr-6 w-32">สี \ ไซส์</th>
@@ -442,7 +442,7 @@ export function StockReceiving() {
                                 onChange={e => setQty(color, size, e.target.value)}
                                 onKeyDown={e => handleGridKeyDown(e, ci, si)}
                                 onFocus={e => e.target.select()}
-                                className="h-9 text-center w-20"
+                                className="h-9 text-center w-16 sm:w-20"
                                 placeholder="0"
                               />
                             </td>
@@ -500,7 +500,7 @@ export function StockReceiving() {
           >
             {isAdding
               ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              : `บันทึก SKU นี้ (${gridTotal} ชิ้น) → ไปต่อ SKU ถัดไป`}
+              : <><PackagePlus className="h-4 w-4 mr-2" /><span className="hidden sm:inline">บันทึก SKU นี้ ({gridTotal} ชิ้น) → ไปต่อ SKU ถัดไป</span><span className="sm:hidden">บันทึก ({gridTotal} ชิ้น)</span></>}
           </Button>
         </CardContent>
       </Card>

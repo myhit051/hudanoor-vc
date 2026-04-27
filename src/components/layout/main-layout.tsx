@@ -110,7 +110,7 @@ export function MainLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-rose-50 via-white to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 safe-area-top safe-area-bottom">
       <Sidebar
         currentPage={currentPage}
         onPageChange={handlePageChange}
@@ -119,7 +119,7 @@ export function MainLayout() {
       
       {/* Main Content */}
       <div className="lg:pl-64">
-        <div className="container mx-auto px-4 py-6">
+        <div className="container mx-auto px-4 py-6 pt-16 lg:pt-6">
           {/* Page Content */}
           {renderCurrentPage()}
         </div>
