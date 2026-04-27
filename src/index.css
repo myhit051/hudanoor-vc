@@ -104,13 +104,13 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Nunito Sans', 'Inter', system-ui, sans-serif;
+    font-family: 'Noto Sans Thai', 'Nunito Sans', 'Inter', system-ui, sans-serif;
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Rubik', 'Inter', system-ui, sans-serif;
+    font-family: 'Rubik', 'Noto Sans Thai', 'Inter', system-ui, sans-serif;
     font-weight: 600;
     letter-spacing: -0.01em;
   }

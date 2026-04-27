@@ -12,7 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, ShoppingCart, Trash2, ChevronsUpDown, Check, Plus, PackageCheck } from "lucide-react";
+import { CalendarIcon, ShoppingCart, Trash2, ChevronsUpDown, Check, Plus, PackageCheck, Lock, Receipt, Package, DollarSign } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { useSales } from "@/hooks/use-sales";
 import { useSettings } from "@/hooks/use-settings";
@@ -202,19 +202,24 @@ export function SalesEntry() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <ShoppingCart className="h-6 w-6 text-rose-500" />
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-pink-500 flex items-center justify-center shadow-md">
+            <ShoppingCart className="h-5 w-5 text-white" />
+          </div>
           บันทึกยอดขาย
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">บันทึกการขายสินค้าจากสต๊อก</p>
+        <p className="text-muted-foreground text-sm mt-1 ml-11">บันทึกการขายสินค้าจากสต๊อก</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Form */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">กรอกข้อมูลการขาย</CardTitle>
+        <Card className="card-elevated overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-950/30 dark:to-pink-950/30 border-b">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-rose-500" />
+              กรอกข้อมูลการขาย
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pt-5">
 
             {/* วันที่ + ช่องทาง + สาขา (ใช้ร่วมทั้ง transaction) */}
             <div>
@@ -239,9 +244,10 @@ export function SalesEntry() {
             </div>
 
             <div>
-              <Label>ผู้บันทึก</Label>
-              <div className="flex items-center gap-2 mt-1 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">🔒 {user?.name || '-'}</span>
+              <Label className="text-xs text-muted-foreground">ผู้บันทึก</Label>
+              <div className="flex items-center gap-2 mt-1 px-3 py-2 bg-muted/50 rounded-lg border border-border">
+                <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-sm font-medium">{user?.name || '-'}</span>
               </div>
             </div>
 
@@ -508,24 +514,34 @@ export function SalesEntry() {
 
         {/* สรุปยอดวันนี้ */}
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">สรุปยอดขายวันนี้</CardTitle>
+          <Card className="card-elevated overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 border-b">
+              <CardTitle className="text-base flex items-center gap-2">
+                <DollarSign className="h-5 w-5 text-orange-500" />
+                สรุปยอดขายวันนี้
+              </CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4">
-              <div className="bg-rose-50 dark:bg-rose-950 rounded-lg p-4 text-center">
-                <p className="text-sm text-muted-foreground">รายการ</p>
-                <p className="text-2xl font-bold text-rose-600">{todayOrders.length}</p>
+            <CardContent className="grid grid-cols-2 gap-4 pt-5">
+              <div className="card-elevated bg-white dark:bg-gray-900 rounded-xl p-4 text-center border border-rose-100 dark:border-rose-900/30">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center mx-auto mb-2">
+                  <Receipt className="h-4 w-4 text-rose-500" />
+                </div>
                 <p className="text-xs text-muted-foreground">รายการ</p>
+                <p className="text-2xl font-bold text-rose-600 animate-count-up">{todayOrders.length}</p>
               </div>
-              <div className="bg-pink-50 dark:bg-pink-950 rounded-lg p-4 text-center">
-                <p className="text-sm text-muted-foreground">จำนวนชิ้น</p>
-                <p className="text-2xl font-bold text-pink-600">{todayQty}</p>
-                <p className="text-xs text-muted-foreground">ชิ้น</p>
+              <div className="card-elevated bg-white dark:bg-gray-900 rounded-xl p-4 text-center border border-pink-100 dark:border-pink-900/30">
+                <div className="w-8 h-8 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center mx-auto mb-2">
+                  <Package className="h-4 w-4 text-pink-500" />
+                </div>
+                <p className="text-xs text-muted-foreground">จำนวนชิ้น</p>
+                <p className="text-2xl font-bold text-pink-600 animate-count-up">{todayQty}</p>
               </div>
-              <div className="col-span-2 bg-orange-50 dark:bg-orange-950 rounded-lg p-4 text-center">
-                <p className="text-sm text-muted-foreground">ยอดขายรวมวันนี้</p>
-                <p className="text-2xl font-bold text-orange-600">
+              <div className="col-span-2 card-elevated bg-white dark:bg-gray-900 rounded-xl p-4 text-center border border-orange-100 dark:border-orange-900/30">
+                <div className="w-8 h-8 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mx-auto mb-2">
+                  <DollarSign className="h-4 w-4 text-orange-500" />
+                </div>
+                <p className="text-xs text-muted-foreground">ยอดขายรวมวันนี้</p>
+                <p className="text-2xl font-bold text-orange-600 animate-count-up">
                   ฿{todayTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                 </p>
               </div>
@@ -535,79 +551,128 @@ export function SalesEntry() {
       </div>
 
       {/* สรุปออเดอร์ล่าสุด */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">สรุปออเดอร์ล่าสุด</CardTitle>
+      <Card className="card-elevated overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-950/30 dark:to-pink-950/30 border-b">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <PackageCheck className="h-5 w-5 text-rose-500" />
+              สรุปออเดอร์ล่าสุด
+            </CardTitle>
+            <Badge variant="secondary" className="text-xs font-normal">
+              {groupedOrders.length} ออเดอร์
+            </Badge>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">กำลังโหลด...</div>
+            <div className="p-6 space-y-4">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="skeleton h-16 rounded-lg" />
+              ))}
+            </div>
           ) : groupedOrders.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">ยังไม่มีรายการ</div>
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <ShoppingCart className="h-10 w-10 mb-3 opacity-30" />
+              <p className="text-sm">ยังไม่มีรายการขาย</p>
+            </div>
           ) : (
             <Accordion type="single" collapsible className="w-full">
               {groupedOrders.map((group, idx) => (
-                <AccordionItem key={group.order_id || `legacy-${idx}`} value={group.order_id || `legacy-${idx}`}>
-                  <AccordionTrigger className="hover:no-underline px-4 py-3 bg-muted/30 rounded-t-lg data-[state=open]:rounded-b-none transition-all">
-                    <div className="flex items-center justify-between w-full mr-4">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <Badge variant="outline" className="bg-white dark:bg-gray-900 font-mono text-xs">
-                          {group.order_id || '-'}
-                        </Badge>
-                        <span className="text-sm font-medium text-muted-foreground">
-                          {formatDate(group.date)}
-                        </span>
-                        {group.created_at && (
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(group.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                <AccordionItem
+                  key={group.order_id || `legacy-${idx}`}
+                  value={group.order_id || `legacy-${idx}`}
+                  className="border-b last:border-0"
+                >
+                  <AccordionTrigger className="hover:no-underline px-5 py-4 hover:bg-muted/40 transition-colors cursor-pointer">
+                    <div className="flex items-center justify-between w-full mr-3 gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex flex-col items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-br from-rose-100 to-pink-100 dark:from-rose-900/40 dark:to-pink-900/40 shrink-0">
+                          <span className="text-[10px] font-medium text-rose-500 leading-none">
+                            {new Date(group.created_at || group.date).toLocaleDateString('th-TH', { day: '2-digit' })}
                           </span>
-                        )}
-                        <div className="text-xs px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
-                          {group.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'} • {group.branch_or_platform}
+                          <span className="text-[9px] text-rose-400 leading-none mt-0.5">
+                            {new Date(group.created_at || group.date).toLocaleDateString('th-TH', { month: 'short' })}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-semibold truncate">{group.order_id || '-'}</span>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px] px-1.5 py-0 shrink-0",
+                                group.channel === 'store'
+                                  ? "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800"
+                                  : "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800"
+                              )}
+                            >
+                              {group.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs text-muted-foreground">{group.branch_or_platform}</span>
+                            <span className="text-xs text-muted-foreground">•</span>
+                            <span className="text-xs text-muted-foreground">โดย {group.recorded_by || '-'}</span>
+                            {group.created_at && (
+                              <>
+                                <span className="text-xs text-muted-foreground">•</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(group.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-sm text-right">
-                          <span className="font-bold">{group.total_items}</span> รายการ
-                          <span className="text-muted-foreground mx-1">({group.total_quantity} ชิ้น)</span>
-                          <span className="font-bold text-rose-600">฿{group.total_amount.toLocaleString('th-TH')}</span>
-                        </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-bold text-rose-600">
+                          ฿{group.total_amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {group.total_items} รายการ · {group.total_quantity} ชิ้น
+                        </p>
                       </div>
                     </div>
                   </AccordionTrigger>
-                  <AccordionContent className="p-4 border-x border-b rounded-b-lg border-muted/50 bg-white dark:bg-gray-900/50">
-                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-muted/50">
-                      <div className="flex items-center gap-3 text-sm">
-                        <span className="text-muted-foreground">ผู้บันทึก:</span>
-                        <span className="font-medium px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                          {group.recorded_by || '-'}
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {group.created_at && (
-                          <span>บันทึกเมื่อ {new Date(group.created_at).toLocaleString('th-TH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} • </span>
-                        )}
-                        {group.total_items} รายการ • {group.total_quantity} ชิ้น
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      {group.items.map(item => (
-                        <div key={item.id} className="flex items-center justify-between py-2 border-b last:border-0 border-muted/50">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-sm">{item.product_name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {item.sku} • {[item.color, item.size].filter(Boolean).join(' / ') || '-'}
-                            </span>
+                  <AccordionContent className="px-5 pb-4">
+                    <div className="rounded-xl border border-muted/60 overflow-hidden">
+                      {group.items.map((item, i) => (
+                        <div
+                          key={item.id}
+                          className={cn(
+                            "flex items-center justify-between px-4 py-3 transition-colors",
+                            i % 2 === 0 ? "bg-muted/20" : "bg-transparent"
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{item.product_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.sku}
+                              {(item.color || item.size) && ` · ${[item.color, item.size].filter(Boolean).join(' / ')}`}
+                            </p>
                           </div>
-                          <div className="text-right text-sm">
-                            <div>{item.quantity} × ฿{Number(item.unit_price).toLocaleString('th-TH')}</div>
+                          <div className="text-right shrink-0 ml-4">
+                            <p className="text-sm">
+                              {item.quantity} × ฿{Number(item.unit_price).toLocaleString('th-TH')}
+                            </p>
                             {Number(item.discount_amount) > 0 && (
-                              <div className="text-xs text-rose-500">- ฿{Number(item.discount_amount).toLocaleString('th-TH')}</div>
+                              <p className="text-[11px] text-rose-500">
+                                -฿{Number(item.discount_amount).toLocaleString('th-TH')}
+                              </p>
                             )}
-                            <div className="font-medium">฿{Number(item.total_amount).toLocaleString('th-TH')}</div>
+                            <p className="text-sm font-semibold">
+                              ฿{Number(item.total_amount).toLocaleString('th-TH')}
+                            </p>
                           </div>
                         </div>
                       ))}
+                      {/* Footer total */}
+                      <div className="flex items-center justify-between px-4 py-3 bg-rose-50/80 dark:bg-rose-950/30 border-t border-muted/60">
+                        <span className="text-sm font-medium text-muted-foreground">ยอดรวม</span>
+                        <span className="text-sm font-bold text-rose-600">
+                          ฿{group.total_amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
                     </div>
                   </AccordionContent>
                 </AccordionItem>

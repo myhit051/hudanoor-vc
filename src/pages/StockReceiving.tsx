@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, PackagePlus, Trash2, X, Copy, ChevronDown, ChevronUp } from "lucide-react";
+import { CalendarIcon, PackagePlus, Trash2, X, Copy, ChevronDown, ChevronUp, Lock, Package, Hash, DollarSign } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { useStock } from "@/hooks/use-stock";
 import { NewStockItem } from "@/lib/stock-api";
@@ -213,15 +213,17 @@ export function StockReceiving() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <PackagePlus className="h-6 w-6 text-rose-500" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-pink-500 flex items-center justify-center shadow-md">
+              <PackagePlus className="h-5 w-5 text-white" />
+            </div>
             รับสินค้าเข้าสต๊อก
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">บันทึกสินค้าที่รับเข้าคลังใหม่</p>
+          <p className="text-muted-foreground text-sm mt-1 ml-11">บันทึกสินค้าที่รับเข้าคลังใหม่</p>
         </div>
         {/* Date picker */}
         <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
           <PopoverTrigger asChild>
-            <Button variant="outline" className="gap-2">
+            <Button variant="outline" className="gap-2 shadow-sm">
               <CalendarIcon className="h-4 w-4" />
               {formatDate(toLocalDateStr(date))}
             </Button>
@@ -239,32 +241,45 @@ export function StockReceiving() {
       </div>
 
       <div>
-        <Label>ผู้บันทึก</Label>
-        <div className="flex items-center gap-2 mt-1 mb-2 px-3 py-2 bg-white dark:bg-gray-800 w-fit rounded-md border border-gray-200 dark:border-gray-700 shadow-sm">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">🔒 {user?.name || '-'}</span>
+        <Label className="text-xs text-muted-foreground">ผู้บันทึก</Label>
+        <div className="flex items-center gap-2 mt-1 mb-2 px-3 py-2 bg-muted/50 w-fit rounded-lg border border-border">
+          <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-sm font-medium">{user?.name || '-'}</span>
         </div>
       </div>
 
       {/* Summary bar */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-rose-50 dark:bg-rose-950 rounded-lg p-3 text-center">
+        <div className="card-elevated bg-white dark:bg-gray-900 rounded-xl p-4 text-center border border-rose-100 dark:border-rose-900/30">
+          <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center mx-auto mb-2">
+            <Hash className="h-4 w-4 text-rose-500" />
+          </div>
           <p className="text-xs text-muted-foreground">SKU วันนี้</p>
-          <p className="text-xl font-bold text-rose-600">{totalSku}</p>
+          <p className="text-2xl font-bold text-rose-600 animate-count-up">{totalSku}</p>
         </div>
-        <div className="bg-pink-50 dark:bg-pink-950 rounded-lg p-3 text-center">
+        <div className="card-elevated bg-white dark:bg-gray-900 rounded-xl p-4 text-center border border-pink-100 dark:border-pink-900/30">
+          <div className="w-8 h-8 rounded-lg bg-pink-100 dark:bg-pink-900/30 flex items-center justify-center mx-auto mb-2">
+            <Package className="h-4 w-4 text-pink-500" />
+          </div>
           <p className="text-xs text-muted-foreground">จำนวนชิ้น</p>
-          <p className="text-xl font-bold text-pink-600">{totalQty}</p>
+          <p className="text-2xl font-bold text-pink-600 animate-count-up">{totalQty}</p>
         </div>
-        <div className="bg-orange-50 dark:bg-orange-950 rounded-lg p-3 text-center">
+        <div className="card-elevated bg-white dark:bg-gray-900 rounded-xl p-4 text-center border border-orange-100 dark:border-orange-900/30">
+          <div className="w-8 h-8 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mx-auto mb-2">
+            <DollarSign className="h-4 w-4 text-orange-500" />
+          </div>
           <p className="text-xs text-muted-foreground">ต้นทุนรวม</p>
-          <p className="text-xl font-bold text-orange-600">฿{totalCost.toLocaleString('th-TH')}</p>
+          <p className="text-2xl font-bold text-orange-600 animate-count-up">฿{totalCost.toLocaleString('th-TH')}</p>
         </div>
       </div>
 
       {/* Main form */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">กรอกข้อมูล SKU</CardTitle>
+      <Card className="card-elevated overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-950/30 dark:to-pink-950/30 border-b">
+          <CardTitle className="text-base flex items-center gap-2">
+            <PackagePlus className="h-5 w-5 text-rose-500" />
+            กรอกข้อมูล SKU
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
 
