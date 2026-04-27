@@ -575,6 +575,17 @@ export function SalesEntry() {
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="p-4 border-x border-b rounded-b-lg border-muted/50 bg-white dark:bg-gray-900/50">
+                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-muted/50">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">ผู้บันทึก:</span>
+                        <span className="font-medium px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                          {group.recorded_by || '-'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {group.total_items} รายการ • {group.total_quantity} ชิ้น
+                      </div>
+                    </div>
                     <div className="space-y-2">
                       {group.items.map(item => (
                         <div key={item.id} className="flex items-center justify-between py-2 border-b last:border-0 border-muted/50">
@@ -602,79 +613,7 @@ export function SalesEntry() {
         </CardContent>
       </Card>
 
-      {/* ตารางประวัติการขาย */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">ประวัติการขายทั้งหมด</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">กำลังโหลด...</div>
-          ) : salesOrders.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">ยังไม่มีรายการ</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>วันที่</TableHead>
-                    <TableHead>ช่องทาง/สาขา</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>สินค้า</TableHead>
-                    <TableHead>สี/ไซส์</TableHead>
-                    <TableHead>ผู้บันทึก</TableHead>
-                    <TableHead className="text-right">จำนวน</TableHead>
-                    <TableHead className="text-right">ราคา/ชิ้น</TableHead>
-                    <TableHead className="text-right">ส่วนลด</TableHead>
-                    <TableHead className="text-right">ยอดรวม</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {salesOrders.map(order => (
-                    <TableRow key={order.id}>
-                      <TableCell className="whitespace-nowrap">{formatDate(order.date)}</TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <div className="text-xs">
-                          <span className="text-muted-foreground">{order.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}</span>
-                          <br />
-                          {order.branch_or_platform}
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{order.sku}</TableCell>
-                      <TableCell>{order.product_name}</TableCell>
-                      <TableCell className="text-sm">
-                        {[order.color, order.size].filter(Boolean).join(' / ') || '-'}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{order.recorded_by || '-'}</TableCell>
-                      <TableCell className="text-right">{order.quantity}</TableCell>
-                      <TableCell className="text-right">฿{Number(order.unit_price).toLocaleString('th-TH')}</TableCell>
-                      <TableCell className="text-right text-rose-500">
-                        {Number(order.discount_amount) > 0
-                          ? `- ฿${Number(order.discount_amount).toLocaleString('th-TH')}`
-                          : '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        ฿{Number(order.total_amount).toLocaleString('th-TH')}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-400 hover:text-red-600 hover:bg-red-50"
-                          onClick={() => deleteSale(order.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+
     </div>
   );
 }
