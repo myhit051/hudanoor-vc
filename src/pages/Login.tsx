@@ -5,12 +5,13 @@ import { login as loginApi } from '@/lib/auth-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Store, Loader2 } from 'lucide-react';
+import { Store, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Login() {
   const [employeeId, setEmployeeId] = useState('');
   const [pin, setPin] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -71,19 +72,27 @@ export default function Login() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                PIN 4-6 หลัก
+                รหัสผ่าน
               </label>
-              <Input
-                type="password"
-                value={pin}
-                onChange={e => setPin(e.target.value)}
-                placeholder="••••"
-                required
-                maxLength={6}
-                inputMode="numeric"
-                className="h-12 px-4 focus-visible:ring-rose-500"
-                autoComplete="current-password"
-              />
+              <div className="relative">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  value={pin}
+                  onChange={e => setPin(e.target.value)}
+                  placeholder="กรอกรหัสผ่าน"
+                  required
+                  className="h-12 px-4 pr-12 focus-visible:ring-rose-500"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
             </div>
             <Button
               type="submit"
