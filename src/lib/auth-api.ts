@@ -33,7 +33,7 @@ export async function verifyToken(): Promise<{ user: AuthUser }> {
 }
 
 export async function getUsers(): Promise<UserManagement[]> {
-  const res = await fetch(`${API_URL}/api/users`, {
+  const res = await fetch(`${API_URL}/api/auth?action=users`, {
     method: 'GET',
     headers: getHeaders()
   });
@@ -43,7 +43,7 @@ export async function getUsers(): Promise<UserManagement[]> {
 }
 
 export async function createUser(user: Partial<UserManagement> & { pin: string }): Promise<void> {
-  const res = await fetch(`${API_URL}/api/users`, {
+  const res = await fetch(`${API_URL}/api/auth?action=users`, {
     method: 'POST',
     headers: getHeaders(),
     body: JSON.stringify(user)
@@ -53,7 +53,7 @@ export async function createUser(user: Partial<UserManagement> & { pin: string }
 }
 
 export async function updateUser(user: Partial<UserManagement> & { pin?: string }): Promise<void> {
-  const res = await fetch(`${API_URL}/api/users`, {
+  const res = await fetch(`${API_URL}/api/auth?action=users`, {
     method: 'PUT',
     headers: getHeaders(),
     body: JSON.stringify(user)
@@ -63,7 +63,7 @@ export async function updateUser(user: Partial<UserManagement> & { pin?: string 
 }
 
 export async function deleteUser(id: string): Promise<void> {
-  const res = await fetch(`${API_URL}/api/users?id=${id}`, {
+  const res = await fetch(`${API_URL}/api/auth?action=users&id=${id}`, {
     method: 'DELETE',
     headers: getHeaders()
   });
