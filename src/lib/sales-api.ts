@@ -39,6 +39,7 @@ export interface OrderSummary {
   channel: string;
   branch_or_platform: string;
   recorded_by: string;
+  created_at: string;
   total_items: number;
   total_quantity: number;
   total_amount: number;
@@ -114,6 +115,7 @@ export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
         channel: sale.channel,
         branch_or_platform: sale.branch_or_platform,
         recorded_by: sale.recorded_by,
+        created_at: sale.created_at,
         total_items: 0,
         total_quantity: 0,
         total_amount: 0,

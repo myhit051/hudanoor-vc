@@ -550,25 +550,26 @@ export function SalesEntry() {
                 <AccordionItem key={group.order_id || `legacy-${idx}`} value={group.order_id || `legacy-${idx}`}>
                   <AccordionTrigger className="hover:no-underline px-4 py-3 bg-muted/30 rounded-t-lg data-[state=open]:rounded-b-none transition-all">
                     <div className="flex items-center justify-between w-full mr-4">
-                      <div className="flex items-center gap-4">
-                        <Badge variant="outline" className="bg-white dark:bg-gray-900 font-mono">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <Badge variant="outline" className="bg-white dark:bg-gray-900 font-mono text-xs">
                           {group.order_id || '-'}
                         </Badge>
                         <span className="text-sm font-medium text-muted-foreground">
                           {formatDate(group.date)}
                         </span>
+                        {group.created_at && (
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(group.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                          </span>
+                        )}
                         <div className="text-xs px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
                           {group.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'} • {group.branch_or_platform}
                         </div>
                       </div>
-                      <div className="flex items-center gap-6">
-                        <div className="text-sm">
-                          <span className="text-muted-foreground mr-1">บันทึกโดย:</span>
-                          <span className="font-medium">{group.recorded_by || '-'}</span>
-                        </div>
+                      <div className="flex items-center gap-4">
                         <div className="text-sm text-right">
                           <span className="font-bold">{group.total_items}</span> รายการ
-                          <span className="text-muted-foreground mx-2">({group.total_quantity} ชิ้น)</span>
+                          <span className="text-muted-foreground mx-1">({group.total_quantity} ชิ้น)</span>
                           <span className="font-bold text-rose-600">฿{group.total_amount.toLocaleString('th-TH')}</span>
                         </div>
                       </div>
@@ -576,13 +577,16 @@ export function SalesEntry() {
                   </AccordionTrigger>
                   <AccordionContent className="p-4 border-x border-b rounded-b-lg border-muted/50 bg-white dark:bg-gray-900/50">
                     <div className="flex items-center justify-between mb-3 pb-3 border-b border-muted/50">
-                      <div className="flex items-center gap-2 text-sm">
+                      <div className="flex items-center gap-3 text-sm">
                         <span className="text-muted-foreground">ผู้บันทึก:</span>
                         <span className="font-medium px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
                           {group.recorded_by || '-'}
                         </span>
                       </div>
                       <div className="text-xs text-muted-foreground">
+                        {group.created_at && (
+                          <span>บันทึกเมื่อ {new Date(group.created_at).toLocaleString('th-TH', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} • </span>
+                        )}
                         {group.total_items} รายการ • {group.total_quantity} ชิ้น
                       </div>
                     </div>
