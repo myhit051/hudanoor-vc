@@ -2,6 +2,14 @@ const API_BASE = typeof window !== 'undefined'
   ? (window.location.hostname === 'localhost' ? 'http://localhost:3000/api' : '/api')
   : '/api';
 
+function getAuthHeaders() {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
+}
+
 export interface StockItem {
   id: string;
   date: string;
@@ -13,18 +21,21 @@ export interface StockItem {
   cost_price: number;
   sell_price: number;
   note: string;
+  recorded_by: string;
   created_at: string;
   updated_at: string;
 }
 
-export type NewStockItem = Omit<StockItem, 'id' | 'created_at' | 'updated_at'>;
+export type NewStockItem = Omit<StockItem, 'id' | 'created_at' | 'updated_at' | 'recorded_by'>;
 
 export async function getStockItems(params?: { date?: string; sku?: string }): Promise<StockItem[]> {
   const query = new URLSearchParams();
   if (params?.date) query.set('date', params.date);
   if (params?.sku) query.set('sku', params.sku);
 
-  const res = await fetch(`${API_BASE}/stock?${query}`);
+  const res = await fetch(`${API_BASE}/stock?${query}`, {
+    headers: getAuthHeaders()
+  });
   if (!res.ok) throw new Error('Failed to fetch stock');
   const data = await res.json();
   return data.data as StockItem[];
@@ -33,7 +44,7 @@ export async function getStockItems(params?: { date?: string; sku?: string }): P
 export async function addStockItem(item: NewStockItem): Promise<void> {
   const res = await fetch(`${API_BASE}/stock`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(item)
   });
   if (!res.ok) {
@@ -43,7 +54,10 @@ export async function addStockItem(item: NewStockItem): Promise<void> {
 }
 
 export async function deleteStockItem(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/stock?id=${id}`, { method: 'DELETE' });
+  const res = await fetch(`${API_BASE}/stock?id=${id}`, { 
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
   if (!res.ok) throw new Error('Failed to delete stock');
 }
 
@@ -52,7 +66,7 @@ export type UpdateStockItem = Partial<Pick<StockItem, 'quantity' | 'cost_price' 
 export async function updateStockItem(id: string, data: UpdateStockItem): Promise<void> {
   const res = await fetch(`${API_BASE}/stock?id=${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data)
   });
   if (!res.ok) {
@@ -79,14 +93,18 @@ export interface StockInventoryItem {
 }
 
 export async function getAvailableStock(): Promise<AvailableStockItem[]> {
-  const res = await fetch(`${API_BASE}/stock?available=true`);
+  const res = await fetch(`${API_BASE}/stock?available=true`, {
+    headers: getAuthHeaders()
+  });
   if (!res.ok) throw new Error('Failed to fetch available stock');
   const data = await res.json();
   return data.data as AvailableStockItem[];
 }
 
 export async function getStockInventory(): Promise<StockInventoryItem[]> {
-  const res = await fetch(`${API_BASE}/stock?view=inventory`);
+  const res = await fetch(`${API_BASE}/stock?view=inventory`, {
+    headers: getAuthHeaders()
+  });
   if (!res.ok) throw new Error('Failed to fetch stock inventory');
   const data = await res.json();
   return data.data as StockInventoryItem[];

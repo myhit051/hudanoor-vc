@@ -18,8 +18,10 @@ import { useSales } from "@/hooks/use-sales";
 import { useSettings } from "@/hooks/use-settings";
 import { useQuery } from "@tanstack/react-query";
 import { getAvailableStock, AvailableStockItem } from "@/lib/stock-api";
-import { NewSalesOrder } from "@/lib/sales-api";
+import { NewSalesOrder, groupSalesByOrder } from "@/lib/sales-api";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const toLocalDateStr = (d: Date) => {
   const y = d.getFullYear();
@@ -41,12 +43,12 @@ const emptyItemForm = {
   note: ''
 };
 
-interface CartItem extends typeof emptyItemForm {
+type CartItem = typeof emptyItemForm & {
   cartId: string;
   discountAmount: number;
   finalUnitPrice: number;
   totalAmount: number;
-}
+};
 
 export function SalesEntry() {
   const [date, setDate] = useState<Date>(new Date());
@@ -59,6 +61,7 @@ export function SalesEntry() {
 
   const { salesOrders, isLoading, addSales, isAddingBatch, deleteSale } = useSales();
   const { settings } = useSettings();
+  const { user } = useAuth();
 
   const { data: availableStock = [] } = useQuery({
     queryKey: ['stock', { available: true }],
@@ -191,6 +194,9 @@ export function SalesEntry() {
   const todayTotal = todayOrders.reduce((s, o) => s + Number(o.total_amount), 0);
   const todayQty = todayOrders.reduce((s, o) => s + Number(o.quantity), 0);
 
+  // สรุปออเดอร์ล่าสุด
+  const groupedOrders = useMemo(() => groupSalesByOrder(salesOrders).slice(0, 10), [salesOrders]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -230,6 +236,13 @@ export function SalesEntry() {
                   />
                 </PopoverContent>
               </Popover>
+            </div>
+
+            <div>
+              <Label>ผู้บันทึก</Label>
+              <div className="flex items-center gap-2 mt-1 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">🔒 {user?.name || '-'}</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -521,6 +534,74 @@ export function SalesEntry() {
         </div>
       </div>
 
+      {/* สรุปออเดอร์ล่าสุด */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">สรุปออเดอร์ล่าสุด</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="text-center py-8 text-muted-foreground">กำลังโหลด...</div>
+          ) : groupedOrders.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">ยังไม่มีรายการ</div>
+          ) : (
+            <Accordion type="single" collapsible className="w-full">
+              {groupedOrders.map((group, idx) => (
+                <AccordionItem key={group.order_id || `legacy-${idx}`} value={group.order_id || `legacy-${idx}`}>
+                  <AccordionTrigger className="hover:no-underline px-4 py-3 bg-muted/30 rounded-t-lg data-[state=open]:rounded-b-none transition-all">
+                    <div className="flex items-center justify-between w-full mr-4">
+                      <div className="flex items-center gap-4">
+                        <Badge variant="outline" className="bg-white dark:bg-gray-900 font-mono">
+                          {group.order_id || '-'}
+                        </Badge>
+                        <span className="text-sm font-medium text-muted-foreground">
+                          {formatDate(group.date)}
+                        </span>
+                        <div className="text-xs px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300">
+                          {group.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'} • {group.branch_or_platform}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <div className="text-sm">
+                          <span className="text-muted-foreground mr-1">บันทึกโดย:</span>
+                          <span className="font-medium">{group.recorded_by || '-'}</span>
+                        </div>
+                        <div className="text-sm text-right">
+                          <span className="font-bold">{group.total_items}</span> รายการ
+                          <span className="text-muted-foreground mx-2">({group.total_quantity} ชิ้น)</span>
+                          <span className="font-bold text-rose-600">฿{group.total_amount.toLocaleString('th-TH')}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="p-4 border-x border-b rounded-b-lg border-muted/50 bg-white dark:bg-gray-900/50">
+                    <div className="space-y-2">
+                      {group.items.map(item => (
+                        <div key={item.id} className="flex items-center justify-between py-2 border-b last:border-0 border-muted/50">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-sm">{item.product_name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {item.sku} • {[item.color, item.size].filter(Boolean).join(' / ') || '-'}
+                            </span>
+                          </div>
+                          <div className="text-right text-sm">
+                            <div>{item.quantity} × ฿{Number(item.unit_price).toLocaleString('th-TH')}</div>
+                            {Number(item.discount_amount) > 0 && (
+                              <div className="text-xs text-rose-500">- ฿{Number(item.discount_amount).toLocaleString('th-TH')}</div>
+                            )}
+                            <div className="font-medium">฿{Number(item.total_amount).toLocaleString('th-TH')}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          )}
+        </CardContent>
+      </Card>
+
       {/* ตารางประวัติการขาย */}
       <Card>
         <CardHeader>
@@ -541,6 +622,7 @@ export function SalesEntry() {
                     <TableHead>SKU</TableHead>
                     <TableHead>สินค้า</TableHead>
                     <TableHead>สี/ไซส์</TableHead>
+                    <TableHead>ผู้บันทึก</TableHead>
                     <TableHead className="text-right">จำนวน</TableHead>
                     <TableHead className="text-right">ราคา/ชิ้น</TableHead>
                     <TableHead className="text-right">ส่วนลด</TableHead>
@@ -564,6 +646,7 @@ export function SalesEntry() {
                       <TableCell className="text-sm">
                         {[order.color, order.size].filter(Boolean).join(' / ') || '-'}
                       </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{order.recorded_by || '-'}</TableCell>
                       <TableCell className="text-right">{order.quantity}</TableCell>
                       <TableCell className="text-right">฿{Number(order.unit_price).toLocaleString('th-TH')}</TableCell>
                       <TableCell className="text-right text-rose-500">

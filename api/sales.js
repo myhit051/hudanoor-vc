@@ -1,4 +1,5 @@
 import { getTursoClient, initSchema } from '../lib/turso.js';
+import { authenticate } from '../lib/auth-middleware.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -40,8 +41,20 @@ export default async function handler(req, res) {
 
     // POST /api/sales — บันทึกยอดขาย + หักสต๊อก (รองรับทั้ง single object และ array)
     if (req.method === 'POST') {
+      const authUser = authenticate(req);
+      const recordedBy = authUser ? authUser.name : '';
       const items = Array.isArray(req.body) ? req.body : [req.body];
       const now = new Date().toISOString();
+
+      // Generate order_id
+      const dateString = now.split('T')[0].replace(/-/g, '');
+      const prefix = `ORD-${dateString}-`;
+      const seqResult = await db.execute({
+        sql: `SELECT COUNT(DISTINCT order_id) as count FROM sales_orders WHERE order_id LIKE ?`,
+        args: [`${prefix}%`]
+      });
+      const seq = String((seqResult.rows[0]?.count || 0) + 1).padStart(3, '0');
+      const orderId = `${prefix}${seq}`;
 
       // ตรวจสอบข้อมูลและคำนวณ
       const processed = [];
@@ -103,13 +116,13 @@ export default async function handler(req, res) {
           sql: `INSERT INTO sales_orders
                   (id, date, channel, branch_or_platform, sku, product_name, color, size,
                    quantity, unit_price, discount_type, discount_value, discount_amount,
-                   final_unit_price, total_amount, note, stock_in_id, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                   final_unit_price, total_amount, note, stock_in_id, order_id, recorded_by, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           args: [
             id, p.date, p.channel || '', p.branch_or_platform || '',
             p.sku, p.product_name, p.color || '', p.size || '',
             p.qty, p.price, p.discType, p.discVal, p.discountAmount,
-            p.finalUnitPrice, p.totalAmount, p.note || '', p.stock_in_id, now
+            p.finalUnitPrice, p.totalAmount, p.note || '', p.stock_in_id, orderId, recordedBy, now
           ]
         });
         batchOps.push({

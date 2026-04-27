@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Sidebar } from "./sidebar";
+import { useAuth } from "@/hooks/use-auth";
+import AdminPanel from "@/pages/AdminPanel";
 
 import Index from "@/pages/Index";
 import { TaskReminder } from "@/pages/TaskReminder";
@@ -25,6 +27,7 @@ const pathToPage: Record<string, string> = {
   '/employees': 'employees',
   '/update-logs': 'update-logs',
   '/settings': 'settings',
+  '/admin': 'admin-panel',
 };
 
 const pageToPath: Record<string, string> = Object.fromEntries(
@@ -35,8 +38,25 @@ export function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const { user, isAuthenticated, isLoading, isAdmin } = useAuth();
 
   const currentPage = pathToPage[location.pathname] ?? 'dashboard';
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      navigate('/login');
+    } else if (!isLoading && isAuthenticated && !isAdmin && currentPage !== 'dashboard') {
+      if (!user?.allowedMenus?.includes(currentPage) && currentPage !== 'add-record') {
+        navigate('/');
+      }
+    }
+  }, [isLoading, isAuthenticated, isAdmin, user, currentPage, navigate]);
+
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (!isAuthenticated) return null;
 
   const {
     addIncome,
@@ -80,6 +100,8 @@ export function MainLayout() {
         return <UpdateLogs />;
       case 'settings':
         return <AppSettings />;
+      case 'admin-panel':
+        return isAdmin ? <AdminPanel /> : <Index />;
       default:
         return <Index />;
     }

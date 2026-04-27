@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { ConnectionStatus } from "@/components/ui/connection-status";
+import { useAuth } from "@/hooks/use-auth";
 import {
   LayoutDashboard,
   Plus,
@@ -15,7 +16,9 @@ import {
   Settings,
   PackagePlus,
   ShoppingCart,
-  Package
+  Package,
+  LogOut,
+  ShieldAlert
 } from "lucide-react";
 
 interface SidebarProps {
@@ -53,6 +56,7 @@ const menuGroups = [
 
 export function Sidebar({ currentPage, onPageChange, onAddRecord }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { user, isAdmin, logout } = useAuth();
 
   const handleMenuClick = (itemId: string) => {
     if (itemId === "add-record") {
@@ -104,15 +108,28 @@ export function Sidebar({ currentPage, onPageChange, onAddRecord }: SidebarProps
 
       {/* Navigation Groups */}
       <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
-        {menuGroups.map((group) => (
-          <div key={group.label}>
-            <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 select-none">
-              {group.label}
-            </p>
-            <div className="space-y-0.5">
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const isActive = currentPage === item.id;
+        {menuGroups.map((group) => {
+          // Filter items based on allowedMenus
+          const filteredItems = group.items.filter(item => 
+            isAdmin || user?.allowedMenus?.includes(item.id)
+          );
+
+          // Add Admin Panel item for admin
+          if (group.label === "ระบบ" && isAdmin) {
+            filteredItems.push({ id: "admin-panel", label: "Admin Panel", icon: ShieldAlert });
+          }
+
+          if (filteredItems.length === 0) return null;
+
+          return (
+            <div key={group.label}>
+              <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 select-none">
+                {group.label}
+              </p>
+              <div className="space-y-0.5">
+                {filteredItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = currentPage === item.id;
 
                 return (
                   <button
@@ -130,14 +147,26 @@ export function Sidebar({ currentPage, onPageChange, onAddRecord }: SidebarProps
                     <span>{item.label}</span>
                   </button>
                 );
-              })}
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-100 dark:border-gray-800">
+      <div className="p-4 border-t border-gray-100 dark:border-gray-800 space-y-3">
+        {user && (
+          <div className="flex items-center justify-between px-2 py-1">
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">{user.name}</span>
+              <span className="text-xs text-muted-foreground capitalize">{user.role}</span>
+            </div>
+            <Button variant="ghost" size="icon" onClick={logout} className="h-8 w-8 text-rose-500 hover:text-rose-600 hover:bg-rose-50">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
         <div className="flex justify-center">
           <ConnectionStatus />
         </div>

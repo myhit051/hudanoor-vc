@@ -1,4 +1,5 @@
 import { getTursoClient, initSchema } from '../lib/turso.js';
+import { authenticate } from '../lib/auth-middleware.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -86,6 +87,8 @@ export default async function handler(req, res) {
 
     // POST /api/stock — บันทึกสต๊อกใหม่
     if (req.method === 'POST') {
+      const authUser = authenticate(req);
+      const recordedBy = authUser ? authUser.name : '';
       const { date, sku, product_name, color, size, quantity, cost_price, sell_price, note } = req.body;
 
       if (!date || !sku || !product_name) {
@@ -96,15 +99,15 @@ export default async function handler(req, res) {
       const now = new Date().toISOString();
 
       await db.execute({
-        sql: `INSERT INTO stock_in (id, date, sku, product_name, color, size, quantity, cost_price, sell_price, note, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO stock_in (id, date, sku, product_name, color, size, quantity, cost_price, sell_price, note, recorded_by, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           id, date, sku, product_name,
           color || '', size || '',
           Number(quantity) || 1,
           Number(cost_price) || 0,
           Number(sell_price) || 0,
-          note || '', now, now
+          note || '', recordedBy, now, now
         ]
       });
 

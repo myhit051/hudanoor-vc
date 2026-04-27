@@ -15,6 +15,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { useStock } from "@/hooks/use-stock";
 import { NewStockItem } from "@/lib/stock-api";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 
 const PRESET_SIZES = ["S", "M", "L", "XL", "XXL", "ฟรีไซส์"];
 
@@ -59,6 +60,7 @@ export function StockReceiving() {
   const colorInputRef = useRef<HTMLInputElement>(null);
 
   const { stockItems, isLoading, addStock, isAdding, deleteStock } = useStock();
+  const { user } = useAuth();
 
   // --- Color tag logic ---
   const addColor = useCallback((val: string) => {
@@ -234,6 +236,13 @@ export function StockReceiving() {
             />
           </PopoverContent>
         </Popover>
+      </div>
+
+      <div>
+        <Label>ผู้บันทึก</Label>
+        <div className="flex items-center gap-2 mt-1 mb-2 px-3 py-2 bg-white dark:bg-gray-800 w-fit rounded-md border border-gray-200 dark:border-gray-700 shadow-sm">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">🔒 {user?.name || '-'}</span>
+        </div>
       </div>
 
       {/* Summary bar */}
@@ -508,6 +517,7 @@ export function StockReceiving() {
                       <TableHead>ชื่อสินค้า</TableHead>
                       <TableHead>สี</TableHead>
                       <TableHead>ไซส์</TableHead>
+                      <TableHead>ผู้บันทึก</TableHead>
                       <TableHead className="text-right">จำนวน</TableHead>
                       <TableHead className="text-right">ต้นทุน</TableHead>
                       <TableHead className="text-right">ราคาขาย</TableHead>
@@ -522,6 +532,7 @@ export function StockReceiving() {
                         <TableCell className="text-sm">{item.product_name}</TableCell>
                         <TableCell className="text-sm">{item.color || '-'}</TableCell>
                         <TableCell className="text-sm">{item.size || '-'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{item.recorded_by || '-'}</TableCell>
                         <TableCell className="text-right text-sm">{item.quantity}</TableCell>
                         <TableCell className="text-right text-sm">฿{Number(item.cost_price).toLocaleString('th-TH')}</TableCell>
                         <TableCell className="text-right text-sm">฿{Number(item.sell_price).toLocaleString('th-TH')}</TableCell>
