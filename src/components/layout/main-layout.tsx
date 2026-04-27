@@ -42,11 +42,20 @@ export function MainLayout() {
 
   const currentPage = pathToPage[location.pathname] ?? 'dashboard';
 
+  const {
+    addIncome,
+    addExpense,
+    isAddingIncome,
+    isAddingExpense
+  } = useSheetsData();
+
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       navigate('/login');
     } else if (!isLoading && isAuthenticated && !isAdmin && currentPage !== 'dashboard') {
-      if (!user?.allowedMenus?.includes(currentPage) && currentPage !== 'add-record') {
+      // Only redirect if user doesn't have access to this specific page
+      if (currentPage === 'admin-panel' || 
+          (user?.allowedMenus && !user.allowedMenus.includes(currentPage) && currentPage !== 'add-record')) {
         navigate('/');
       }
     }
@@ -57,13 +66,6 @@ export function MainLayout() {
   }
 
   if (!isAuthenticated) return null;
-
-  const {
-    addIncome,
-    addExpense,
-    isAddingIncome,
-    isAddingExpense
-  } = useSheetsData();
 
   const handleAddRecord = async (record: any) => {
     try {
