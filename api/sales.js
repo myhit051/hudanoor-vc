@@ -108,7 +108,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // batch: insert ทุก sale + deduct stock ทุกรายการ
+      // batch: insert ทุก sale (available stock คำนวณจาก sales_orders อัตโนมัติ ไม่ต้องหัก stock_in.quantity)
       const batchOps = [];
       for (const p of processed) {
         const id = `sale_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -125,24 +125,19 @@ export default async function handler(req, res) {
             p.finalUnitPrice, p.totalAmount, p.note || '', p.stock_in_id, orderId, recordedBy, now
           ]
         });
-        batchOps.push({
-          sql: `UPDATE stock_in SET quantity = quantity - ?, updated_at = ? WHERE id = ?`,
-          args: [p.qty, now, p.stock_in_id]
-        });
       }
       await db.batch(batchOps);
 
       return res.status(201).json({ success: true, count: processed.length });
     }
 
-    // DELETE /api/sales?id=xxx — ลบยอดขาย + คืนสต๊อก (batch)
+    // DELETE /api/sales?id=xxx — ลบยอดขาย (available stock คำนวณจาก sales_orders อัตโนมัติ)
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'Missing id' });
 
-      // ดึงข้อมูล sale ก่อนลบ เพื่อรู้ว่าต้องคืนสต๊อกเท่าไร
       const saleResult = await db.execute({
-        sql: 'SELECT quantity, stock_in_id FROM sales_orders WHERE id = ?',
+        sql: 'SELECT id FROM sales_orders WHERE id = ?',
         args: [id]
       });
 
@@ -150,19 +145,10 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: 'ไม่พบรายการ' });
       }
 
-      const { quantity: qty, stock_in_id } = saleResult.rows[0];
-      const now = new Date().toISOString();
-
-      await db.batch([
-        {
-          sql: 'DELETE FROM sales_orders WHERE id = ?',
-          args: [id]
-        },
-        ...(stock_in_id ? [{
-          sql: 'UPDATE stock_in SET quantity = quantity + ?, updated_at = ? WHERE id = ?',
-          args: [qty, now, stock_in_id]
-        }] : [])
-      ]);
+      await db.execute({
+        sql: 'DELETE FROM sales_orders WHERE id = ?',
+        args: [id]
+      });
 
       return res.status(200).json({ success: true });
     }
