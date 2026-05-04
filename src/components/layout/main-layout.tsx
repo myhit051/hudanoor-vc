@@ -13,6 +13,7 @@ import { UpdateLogs } from "@/pages/UpdateLogs";
 import { AppSettings } from "@/pages/AppSettings";
 import { StockReceiving } from "@/pages/StockReceiving";
 import { SalesEntry } from "@/pages/SalesEntry";
+import OrderHistory from "@/pages/OrderHistory";
 import { StockInventory } from "@/pages/StockInventory";
 import { AddRecordForm } from "@/components/forms/add-record-form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,6 +23,7 @@ const pathToPage: Record<string, string> = {
   '/': 'dashboard',
   '/stock-receiving': 'stock-receiving',
   '/sales-entry': 'sales-entry',
+  '/order-history': 'order-history',
   '/stock-inventory': 'stock-inventory',
   '/task-reminder': 'task-reminder',
   '/employees': 'employees',
@@ -92,6 +94,8 @@ export function MainLayout() {
         return <StockReceiving />;
       case 'sales-entry':
         return <SalesEntry />;
+      case 'order-history':
+        return <OrderHistory />;
       case 'stock-inventory':
         return <StockInventory />;
       case 'task-reminder':

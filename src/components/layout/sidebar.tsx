@@ -18,7 +18,8 @@ import {
   ShoppingCart,
   Package,
   LogOut,
-  ShieldAlert
+  ShieldAlert,
+  History
 } from "lucide-react";
 
 interface SidebarProps {
@@ -40,6 +41,7 @@ const menuGroups = [
       { id: "add-record",       label: "บันทึกรายการใหม่", icon: Plus },
       { id: "stock-receiving",  label: "รับสินค้าเข้าสต๊อก", icon: PackagePlus },
       { id: "sales-entry",      label: "บันทึกยอดขาย",    icon: ShoppingCart },
+      { id: "order-history",    label: "ประวัติการขาย",   icon: History },
       { id: "stock-inventory",  label: "สต๊อกคงเหลือ",    icon: Package },
       { id: "task-reminder",    label: "Task Reminder",    icon: CheckSquare },
       { id: "employees",        label: "จัดการพนักงาน",   icon: Users },
