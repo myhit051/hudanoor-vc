@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSales } from '@/hooks/use-sales';
 import { groupSalesByOrder } from '@/lib/sales-api';
 import { Search, History, Trash2, Loader2, PackageCheck } from 'lucide-react';
@@ -24,6 +25,52 @@ export function OrderHistory() {
   const [dateFrom, setDateFrom] = useState(toLocalDateStr(new Date()));
   const [dateTo, setDateTo] = useState(toLocalDateStr(new Date()));
   const [searchQuery, setSearchQuery] = useState('');
+  const [preset, setPreset] = useState('today');
+
+  const handlePresetChange = (value: string) => {
+    setPreset(value);
+    const today = new Date();
+    
+    switch (value) {
+      case 'today':
+        setDateFrom(toLocalDateStr(today));
+        setDateTo(toLocalDateStr(today));
+        break;
+      case 'yesterday':
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        setDateFrom(toLocalDateStr(yesterday));
+        setDateTo(toLocalDateStr(yesterday));
+        break;
+      case 'last7days':
+        const last7 = new Date(today);
+        last7.setDate(last7.getDate() - 6);
+        setDateFrom(toLocalDateStr(last7));
+        setDateTo(toLocalDateStr(today));
+        break;
+      case 'last30days':
+        const last30 = new Date(today);
+        last30.setDate(last30.getDate() - 29);
+        setDateFrom(toLocalDateStr(last30));
+        setDateTo(toLocalDateStr(today));
+        break;
+      case 'thisMonth':
+        const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        setDateFrom(toLocalDateStr(firstDayThisMonth));
+        setDateTo(toLocalDateStr(today));
+        break;
+      case 'lastMonth':
+        const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+        setDateFrom(toLocalDateStr(firstDayLastMonth));
+        setDateTo(toLocalDateStr(lastDayLastMonth));
+        break;
+      case 'all':
+        setDateFrom('');
+        setDateTo('');
+        break;
+    }
+  };
 
   const { salesOrders, isLoading, deleteSale, deleteOrder, isDeleting, isDeletingOrder } = useSales();
 
@@ -73,14 +120,39 @@ export function OrderHistory() {
 
       <Card className="card-elevated">
         <CardContent className="p-4 sm:p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label>ช่วงเวลา</Label>
+              <Select value={preset} onValueChange={handlePresetChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="เลือกช่วงเวลา" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">วันนี้</SelectItem>
+                  <SelectItem value="yesterday">เมื่อวาน</SelectItem>
+                  <SelectItem value="last7days">7 วันล่าสุด</SelectItem>
+                  <SelectItem value="last30days">30 วันล่าสุด</SelectItem>
+                  <SelectItem value="thisMonth">เดือนนี้</SelectItem>
+                  <SelectItem value="lastMonth">เดือนที่ผ่านมา</SelectItem>
+                  <SelectItem value="all">ทั้งหมด</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>ตั้งแต่วันที่</Label>
-              <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+              <Input 
+                type="date" 
+                value={dateFrom} 
+                onChange={e => { setDateFrom(e.target.value); setPreset('custom'); }} 
+              />
             </div>
             <div className="space-y-2">
               <Label>ถึงวันที่</Label>
-              <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+              <Input 
+                type="date" 
+                value={dateTo} 
+                onChange={e => { setDateTo(e.target.value); setPreset('custom'); }} 
+              />
             </div>
             <div className="space-y-2">
               <Label>ค้นหา</Label>
