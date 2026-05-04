@@ -42,7 +42,7 @@ export function useSales(params?: { date?: string; sku?: string; channel?: strin
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      toast({ title: 'ลบรายการสำเร็จ', description: 'คืนสต๊อกเรียบร้อยแล้ว' });
+      toast({ title: 'ลบรายการสำเร็จ', description: 'สต๊อกอัปเดตเรียบร้อยแล้ว' });
     },
     onError: (error: Error) => {
       toast({ title: 'เกิดข้อผิดพลาด', description: error.message, variant: 'destructive' });
