@@ -8,12 +8,18 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { useSales } from '@/hooks/use-sales';
 import { groupSalesByOrder } from '@/lib/sales-api';
 import { Search, History, Trash2, Loader2, PackageCheck } from 'lucide-react';
-import { cn, toLocalDateStr } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 
 export function OrderHistory() {
   const { user } = useAuth();
   
+  const toLocalDateStr = (d: Date) => {
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+      .toISOString()
+      .split('T')[0];
+  };
+
   // Date filter state (default to today)
   const [dateFrom, setDateFrom] = useState(toLocalDateStr(new Date()));
   const [dateTo, setDateTo] = useState(toLocalDateStr(new Date()));
