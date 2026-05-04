@@ -14,6 +14,7 @@ const MENU_OPTIONS = [
   { id: 'add-record', label: 'บันทึกรายการใหม่' },
   { id: 'stock-receiving', label: 'รับสินค้าเข้าสต๊อก' },
   { id: 'sales-entry', label: 'บันทึกยอดขาย' },
+  { id: 'order-history', label: 'ประวัติการขาย' },
   { id: 'stock-inventory', label: 'สต๊อกคงเหลือ' },
   { id: 'task-reminder', label: 'Task Reminder' },
   { id: 'employees', label: 'จัดการพนักงาน' },
