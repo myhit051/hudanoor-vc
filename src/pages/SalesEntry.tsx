@@ -59,7 +59,7 @@ export function SalesEntry() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [stockComboOpen, setStockComboOpen] = useState(false);
 
-  const { salesOrders, isLoading, addSales, isAddingBatch, deleteSale } = useSales();
+  const { salesOrders, isLoading, addSales, isAddingBatch, deleteSale, deleteOrder, isDeleting, isDeletingOrder } = useSales();
   const { settings } = useSettings();
   const { user } = useAuth();
 
@@ -186,6 +186,15 @@ export function SalesEntry() {
         setBranchOrPlatform('');
       }
     });
+  };
+
+  const handleDeleteOrder = (orderId: string, isLegacy: boolean) => {
+    if (!confirm('คุณต้องการลบออเดอร์นี้ใช่หรือไม่? ข้อมูลการขายจะถูกลบและสต๊อกจะถูกคืนกลับอัตโนมัติ')) return;
+    if (isLegacy) {
+      deleteSale(orderId);
+    } else {
+      deleteOrder(orderId);
+    }
   };
 
   // สรุปยอดวันนี้
@@ -673,6 +682,21 @@ export function SalesEntry() {
                           ฿{group.total_amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                         </span>
                       </div>
+                      {/* Delete Action */}
+                      {(user?.role === 'admin' || user?.name === group.recorded_by) && (
+                        <div className="px-4 py-3 bg-muted/20 border-t border-muted/60 flex justify-end">
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="text-xs h-8"
+                            disabled={isDeleting || isDeletingOrder}
+                            onClick={() => handleDeleteOrder(group.order_id || group.items[0].id, !group.order_id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-1" />
+                            ลบออเดอร์
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </AccordionContent>
                 </AccordionItem>

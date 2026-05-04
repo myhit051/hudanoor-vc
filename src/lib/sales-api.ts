@@ -101,6 +101,17 @@ export async function deleteSalesOrder(id: string): Promise<void> {
   }
 }
 
+export async function deleteOrder(order_id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/sales?order_id=${order_id}`, { 
+    method: 'DELETE',
+    headers: getAuthHeaders()
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to delete order');
+  }
+}
+
 export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
   const groups: Record<string, OrderSummary> = {};
   

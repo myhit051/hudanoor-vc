@@ -131,24 +131,41 @@ export default async function handler(req, res) {
       return res.status(201).json({ success: true, count: processed.length });
     }
 
-    // DELETE /api/sales?id=xxx — ลบยอดขาย (available stock คำนวณจาก sales_orders อัตโนมัติ)
+    // DELETE /api/sales?id=xxx หรือ ?order_id=xxx — ลบยอดขาย (available stock คำนวณจาก sales_orders อัตโนมัติ)
     if (req.method === 'DELETE') {
-      const { id } = req.query;
-      if (!id) return res.status(400).json({ error: 'Missing id' });
+      const authUser = authenticate(req);
+      if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
 
-      const saleResult = await db.execute({
-        sql: 'SELECT id FROM sales_orders WHERE id = ?',
-        args: [id]
-      });
+      const { id, order_id } = req.query;
+      if (!id && !order_id) return res.status(400).json({ error: 'Missing id or order_id' });
+
+      let sql = '';
+      let args = [];
+      if (order_id) {
+        sql = 'SELECT id, recorded_by FROM sales_orders WHERE order_id = ? LIMIT 1';
+        args = [order_id];
+      } else {
+        sql = 'SELECT id, recorded_by FROM sales_orders WHERE id = ?';
+        args = [id];
+      }
+
+      const saleResult = await db.execute({ sql, args });
 
       if (saleResult.rows.length === 0) {
         return res.status(404).json({ error: 'ไม่พบรายการ' });
       }
 
-      await db.execute({
-        sql: 'DELETE FROM sales_orders WHERE id = ?',
-        args: [id]
-      });
+      // Check permission: must be admin or the creator
+      const creator = saleResult.rows[0].recorded_by;
+      if (authUser.role !== 'admin' && authUser.name !== creator) {
+        return res.status(403).json({ error: 'ไม่มีสิทธิ์ลบรายการนี้ (ลบได้เฉพาะ Admin หรือผู้บันทึก)' });
+      }
+
+      if (order_id) {
+        await db.execute({ sql: 'DELETE FROM sales_orders WHERE order_id = ?', args: [order_id] });
+      } else {
+        await db.execute({ sql: 'DELETE FROM sales_orders WHERE id = ?', args: [id] });
+      }
 
       return res.status(200).json({ success: true });
     }

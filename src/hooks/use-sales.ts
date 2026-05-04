@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSalesOrders, addSalesOrder, addSalesOrders, deleteSalesOrder, NewSalesOrder } from '@/lib/sales-api';
+import { getSalesOrders, addSalesOrder, addSalesOrders, deleteSalesOrder, deleteOrder, NewSalesOrder } from '@/lib/sales-api';
 import { toast } from '@/hooks/use-toast';
 
 export function useSales(params?: { date?: string; sku?: string; channel?: string }) {
@@ -49,6 +49,18 @@ export function useSales(params?: { date?: string; sku?: string; channel?: strin
     }
   });
 
+  const deleteOrderMutation = useMutation({
+    mutationFn: deleteOrder,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast({ title: 'ลบออเดอร์สำเร็จ', description: 'สต๊อกอัปเดตเรียบร้อยแล้ว' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'เกิดข้อผิดพลาด', description: error.message, variant: 'destructive' });
+    }
+  });
+
   return {
     salesOrders,
     isLoading,
@@ -58,6 +70,8 @@ export function useSales(params?: { date?: string; sku?: string; channel?: strin
     addSales: addBatchMutation.mutate,
     isAddingBatch: addBatchMutation.isPending,
     deleteSale: deleteMutation.mutate,
-    isDeleting: deleteMutation.isPending
+    isDeleting: deleteMutation.isPending,
+    deleteOrder: deleteOrderMutation.mutate,
+    isDeletingOrder: deleteOrderMutation.isPending
   };
 }
