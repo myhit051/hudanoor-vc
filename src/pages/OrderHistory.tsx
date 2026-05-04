@@ -8,7 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSales } from '@/hooks/use-sales';
 import { groupSalesByOrder } from '@/lib/sales-api';
-import { Search, History, Trash2, Loader2, PackageCheck } from 'lucide-react';
+import { Search, History, Trash2, Loader2, PackageCheck, TrendingUp, ShoppingCart, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -98,6 +98,23 @@ export function OrderHistory() {
 
   const groupedOrders = useMemo(() => groupSalesByOrder(filteredSales), [filteredSales]);
 
+  // Calculate Summary KPIs
+  const summary = useMemo(() => {
+    let totalAmount = 0;
+    let totalItems = 0;
+    
+    groupedOrders.forEach(order => {
+      totalAmount += order.total_amount;
+      totalItems += order.total_quantity;
+    });
+
+    return {
+      totalAmount,
+      totalOrders: groupedOrders.length,
+      totalItems
+    };
+  }, [groupedOrders]);
+
   // Handle Delete
   const handleDeleteOrder = (orderId: string, isLegacy: boolean) => {
     if (!confirm('คุณต้องการลบออเดอร์นี้ใช่หรือไม่? ข้อมูลการขายจะถูกลบและสต๊อกจะถูกคืนกลับอัตโนมัติ')) return;
@@ -116,6 +133,51 @@ export function OrderHistory() {
           ประวัติการขาย
         </h2>
         <p className="text-muted-foreground mt-1">ดูรายการออเดอร์ย้อนหลัง ค้นหา และลบรายการ</p>
+      </div>
+
+      {/* KPI Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-rose-100 dark:border-rose-900/30">
+          <CardContent className="p-4 sm:p-6 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center shrink-0">
+              <TrendingUp className="h-6 w-6 text-rose-600 dark:text-rose-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-1">ยอดขายรวม</p>
+              <h3 className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+                ฿{summary.totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+              </h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-blue-100 dark:border-blue-900/30">
+          <CardContent className="p-4 sm:p-6 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
+              <ShoppingCart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-1">จำนวนออเดอร์</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {summary.totalOrders.toLocaleString('th-TH')} <span className="text-base font-normal text-muted-foreground">บิล</span>
+              </h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-emerald-100 dark:border-emerald-900/30">
+          <CardContent className="p-4 sm:p-6 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+              <Package className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-1">จำนวนสินค้าที่ขาย</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {summary.totalItems.toLocaleString('th-TH')} <span className="text-base font-normal text-muted-foreground">ชิ้น</span>
+              </h3>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="card-elevated">
