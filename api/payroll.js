@@ -1,4 +1,3 @@
-import { google } from 'googleapis';
 import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate, requireAdmin } from '../lib/auth-middleware.js';
 
@@ -78,34 +77,24 @@ function calcEmployeeCommission(employee, incomes) {
   return { breakdown, totalCommission };
 }
 
+// Load sales for a YYYY-MM period from Turso `sales_orders`
 async function loadIncomesForPeriod(period) {
   if (!period) return [];
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      client_email: process.env.GOOGLE_CLIENT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n').replace(/"/g, ''),
-    },
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  const db = getTursoClient();
+  // dates stored as 'YYYY-MM-DD' — match by prefix
+  const result = await db.execute({
+    sql: `SELECT id, date, channel, branch_or_platform, total_amount
+          FROM sales_orders
+          WHERE date LIKE ?`,
+    args: [`${period}-%`],
   });
-  const sheets = google.sheets({ version: 'v4', auth });
-  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || process.env.GOOGLE_SHEETS_ID;
-  if (!spreadsheetId) throw new Error('Spreadsheet ID not configured');
-
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: 'รายรับ!A:K',
-  });
-  const rows = response.data.values || [];
-  const incomes = rows.slice(1)
-    .filter((row) => row[0] && String(row[0]).trim() !== '')
-    .map((row) => ({
-      id: row[0],
-      date: row[1],
-      channel: row[2] || 'store',
-      branchOrPlatform: row[3] || '',
-      totalAmount: parseFloat(row[7]) || 0,
-    }));
-  return incomes.filter((i) => i.date && String(i.date).substring(0, 7) === period);
+  return result.rows.map((row) => ({
+    id: row.id,
+    date: row.date,
+    channel: row.channel || 'store',
+    branchOrPlatform: row.branch_or_platform || '',
+    totalAmount: Number(row.total_amount) || 0,
+  }));
 }
 
 export default async function handler(req, res) {
