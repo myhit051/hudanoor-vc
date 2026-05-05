@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Download, Printer } from "lucide-react";
@@ -85,6 +85,9 @@ export function PayslipDialog({ open, onOpenChange, item, run, shopName = "HUDAN
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto print:max-w-full print:max-h-none">
         <DialogHeader className="print:hidden">
           <DialogTitle>ใบแจ้งเงินเดือน — {item.employeeName}</DialogTitle>
+          <DialogDescription>
+            งวดประจำเดือน {monthLabel(run.period)} — กดปุ่มเพื่อพิมพ์หรือดาวน์โหลด PDF
+          </DialogDescription>
         </DialogHeader>
 
         {/* Action bar */}

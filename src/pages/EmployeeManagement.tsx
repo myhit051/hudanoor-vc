@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -72,8 +72,6 @@ export function EmployeeManagement() {
     fetchReports
   } = useCommissionReports(selectedPeriod);
 
-  // Debug: แสดงข้อมูล branches ใน console
-  console.log('EmployeeManagement - Current branches:', settings.branches);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [formData, setFormData] = useState({
@@ -269,6 +267,9 @@ export function EmployeeManagement() {
               <DialogTitle>
                 {editingEmployee ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงานใหม่"}
               </DialogTitle>
+              <DialogDescription>
+                กรอกข้อมูลพนักงาน เงินเดือน สาขาประจำ/รอง และอัตราค่าคอม
+              </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
