@@ -27,6 +27,13 @@ function normalizeChannel(raw) {
   return 'store';
 }
 
+// Loose match for branch/platform names — Sheet data can drift from the
+// system's configured names (case, whitespace, hidden chars). Use this
+// for commission matching so "Tiktok" / "tiktok" / " Tiktok " all line up.
+function normName(raw) {
+  return String(raw || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 function safeParseJSON(value, fallback) {
   if (Array.isArray(value)) return value;
   if (typeof value !== 'string' || value.trim() === '') return fallback;
@@ -86,11 +93,13 @@ function rowToItem(row) {
 function calcEmployeeCommission(employee, incomes) {
   const breakdown = (employee.branchCommissions || []).map((commission) => {
     const wantsAllInChannel = !commission.branchOrPlatform || commission.branchOrPlatform.trim() === '';
+    const targetChannel = normName(commission.channel);
+    const targetBranch = normName(commission.branchOrPlatform);
     const salesForBranch = incomes
       .filter((income) => {
-        if (income.channel !== commission.channel) return false;
+        if (normName(income.channel) !== targetChannel) return false;
         if (wantsAllInChannel) return true;
-        return income.branchOrPlatform === commission.branchOrPlatform;
+        return normName(income.branchOrPlatform) === targetBranch;
       })
       .reduce((sum, income) => sum + income.totalAmount, 0);
     const rate = Number(commission.commissionRate) || 0;
@@ -199,11 +208,13 @@ export default async function handler(req, res) {
 
           employee.branchCommissions.forEach((commission) => {
             const wantsAllInChannel = !commission.branchOrPlatform || commission.branchOrPlatform.trim() === '';
+            const targetChannel = normName(commission.channel);
+            const targetBranch = normName(commission.branchOrPlatform);
             const salesForBranch = incomes
               .filter((income) => {
-                if (income.channel !== commission.channel) return false;
+                if (normName(income.channel) !== targetChannel) return false;
                 if (wantsAllInChannel) return true;
-                return income.branchOrPlatform === commission.branchOrPlatform;
+                return normName(income.branchOrPlatform) === targetBranch;
               })
               .reduce((sum, income) => sum + income.totalAmount, 0);
             const commissionAmount = salesForBranch * ((Number(commission.commissionRate) || 0) / 100);
