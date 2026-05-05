@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,6 +19,17 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
 const PRESET_SIZES = ["S", "M", "L", "XL", "XXL", "ฟรีไซส์"];
+
+const PRESET_CATEGORIES = [
+  "มินิเดรส",
+  "กางเกง",
+  "กระโปรง",
+  "เสื้อ",
+  "เดรสสั่งตัด",
+  "เดรสยาว",
+  "ผ้าคลุม",
+  "อื่นๆ",
+];
 
 const toLocalDateStr = (d: Date) => {
   const y = d.getFullYear();
@@ -313,13 +325,21 @@ export function StockReceiving() {
           {/* Row 1.5: หมวดหมู่สินค้า */}
           <div>
             <Label htmlFor="product_category">หมวดหมู่สินค้า</Label>
-            <Input
-              id="product_category"
-              className="mt-1"
+            <Select
               value={form.product_category}
-              onChange={e => setForm(prev => ({ ...prev, product_category: e.target.value }))}
-              placeholder="เช่น เดรส, เสื้อ, กระโปรง (ถ้าไม่ระบุจะแสดงเป็น 'ไม่ระบุ')"
-            />
+              onValueChange={value => setForm(prev => ({ ...prev, product_category: value }))}
+            >
+              <SelectTrigger id="product_category" className="mt-1">
+                <SelectValue placeholder="เลือกหมวดหมู่สินค้า" />
+              </SelectTrigger>
+              <SelectContent>
+                {PRESET_CATEGORIES.map(cat => (
+                  <SelectItem key={cat} value={cat}>
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Row 2: ราคา + copy */}
