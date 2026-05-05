@@ -45,7 +45,7 @@ export const useEmployees = () => {
       
       toast({
         title: "เพิ่มพนักงานสำเร็จ",
-        description: "บันทึกข้อมูลลง Google Sheets แล้ว"
+        description: "บันทึกข้อมูลพนักงานเรียบร้อยแล้ว"
       });
     },
     onError: (error) => {
@@ -88,7 +88,7 @@ export const useEmployees = () => {
       
       toast({
         title: "ลบพนักงานสำเร็จ",
-        description: "ลบรายการออกจาก Google Sheets แล้ว"
+        description: "ลบพนักงานออกจากระบบแล้ว"
       });
     },
     onError: (error) => {
