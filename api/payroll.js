@@ -107,16 +107,18 @@ function calcEmployeeCommission(employee, incomes) {
   return { breakdown, totalCommission };
 }
 
-// Load sales for a YYYY-MM period from Turso `sales_orders`
+// Load sales for a YYYY-MM period from BOTH sales_orders (real sales)
+// AND legacy_sales (imported from Sheet — payroll-only).
 async function loadIncomesForPeriod(period) {
   if (!period) return [];
   const db = getTursoClient();
-  // dates stored as 'YYYY-MM-DD' — match by prefix
   const result = await db.execute({
-    sql: `SELECT id, date, channel, branch_or_platform, total_amount
-          FROM sales_orders
-          WHERE date LIKE ?`,
-    args: [`${period}-%`],
+    sql: `
+      SELECT id, date, channel, branch_or_platform, total_amount, 'sales' AS source FROM sales_orders WHERE date LIKE ?
+      UNION ALL
+      SELECT id, date, channel, branch_or_platform, total_amount, 'legacy' AS source FROM legacy_sales WHERE date LIKE ?
+    `,
+    args: [`${period}-%`, `${period}-%`],
   });
   return result.rows.map((row) => ({
     id: row.id,
@@ -124,6 +126,7 @@ async function loadIncomesForPeriod(period) {
     channel: row.channel || 'store',
     branchOrPlatform: row.branch_or_platform || '',
     totalAmount: Number(row.total_amount) || 0,
+    source: row.source,
   }));
 }
 
@@ -155,10 +158,12 @@ export default async function handler(req, res) {
           if (!date || total <= 0) skippedEmpty++;
           else validRows++;
         }
-        const prevResult = await db.execute(
+        // Count both: dedicated legacy_sales table + any leftover rows in sales_orders from old import strategy
+        const prevLegacy = await db.execute(`SELECT COUNT(*) AS c FROM legacy_sales`);
+        const prevOrders = await db.execute(
           `SELECT COUNT(*) AS c FROM sales_orders WHERE recorded_by = 'sheet-import'`
         );
-        const previousImports = Number(prevResult.rows[0]?.c) || 0;
+        const previousImports = (Number(prevLegacy.rows[0]?.c) || 0) + (Number(prevOrders.rows[0]?.c) || 0);
         return res.status(200).json({
           totalInSheet: dataRows.length,
           validRows,
@@ -319,10 +324,10 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Admin access required' });
       }
 
-      // Import legacy sales from Google Sheets `รายรับ` into Turso `sales_orders`.
-      // Strategy: ignore the messy ID column — derive the ID from the row position
-      // (legacy_row_<n>). Always wipe previous imports and re-insert so the DB
-      // stays in sync with the current sheet content.
+      // Import legacy sales from Google Sheets `รายรับ` into a dedicated
+      // `legacy_sales` table. This table is read ONLY by payroll/commission
+      // calculation — it never affects stock, OrderHistory, or sales_orders.
+      // Strategy: derive ID from sheet row position; wipe + re-insert each run.
       if (req.query.action === 'import-sales' || req.body?.action === 'import-sales') {
         const rows = await readLegacyIncomeSheet();
         const dataRows = rows.slice(1);
@@ -331,24 +336,24 @@ export default async function handler(req, res) {
         let errors = 0;
         let skippedEmpty = 0;
 
-        // Step 1 — wipe previous imports so we can re-insert cleanly
-        const wipeResult = await db.execute(
+        // Step 1 — clean slate: wipe legacy_sales AND any leftover sheet-import rows
+        // in sales_orders (from earlier versions before this dedicated table existed)
+        const wipeLegacy = await db.execute(`DELETE FROM legacy_sales`);
+        const wipeOrders = await db.execute(
           `DELETE FROM sales_orders WHERE recorded_by = 'sheet-import'`
         );
-        const wipedCount = Number(wipeResult.rowsAffected) || 0;
+        const wipedCount = (Number(wipeLegacy.rowsAffected) || 0) + (Number(wipeOrders.rowsAffected) || 0);
 
-        // Step 2 — build INSERT batch using row index as deterministic ID
-        const insertSql = `INSERT INTO sales_orders (
-          id, date, channel, branch_or_platform, sku, product_name, color, size,
-          quantity, unit_price, discount_type, discount_value, discount_amount,
-          final_unit_price, total_amount, note, stock_in_id, created_at, recorded_by, order_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        // Step 2 — build INSERTs into legacy_sales using row index
+        const insertSql = `INSERT INTO legacy_sales (
+          id, source_row, date, channel, branch_or_platform, product_name,
+          quantity, total_amount, note, imported_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
         const inserts = [];
         dataRows.forEach((row, idx) => {
           const date = String(row[1] || '').trim();
           const total = parseFloat(row[7]) || 0;
-          // Skip rows with no date or zero total — they don't affect commission
           if (!date || total <= 0) { skippedEmpty++; return; }
           const rowNum = idx + 2; // sheet row number (1-based, +1 for header)
           const importId = `legacy_row_${rowNum}`;
@@ -356,28 +361,19 @@ export default async function handler(req, res) {
           const branch = String(row[3] || '').trim();
           const productName = String(row[4] || '').trim() || '(ไม่ระบุ)';
           const qty = parseInt(row[6]) || 1;
-          const unitPrice = qty > 0 ? total / qty : 0;
           const origNote = String(row[8] || '').trim();
-          const noteCombined = origNote
-            ? `นำเข้าจาก Sheet (row ${rowNum}) | ${origNote}`
-            : `นำเข้าจาก Sheet (row ${rowNum})`;
-          const createdAt = String(row[9] || '').trim() || now;
           inserts.push({
             rowNum,
             stmt: {
               sql: insertSql,
-              args: [
-                importId, date, channel, branch, 'LEGACY', productName, '', '',
-                qty, unitPrice, 'amount', 0, 0,
-                unitPrice, total, noteCombined, null, createdAt, 'sheet-import', `LEGACY-ROW-${rowNum}`,
-              ],
+              args: [importId, rowNum, date, channel, branch, productName, qty, total, origNote, now],
             },
           });
         });
 
-        // Step 3 — execute in batches; per-row fallback on batch failure
+        // Step 3 — batch insert with per-row fallback
         let imported = 0;
-        const batchSize = 50;
+        const batchSize = 100;
         for (let i = 0; i < inserts.length; i += batchSize) {
           const batch = inserts.slice(i, i + batchSize);
           try {
@@ -404,7 +400,7 @@ export default async function handler(req, res) {
           wipedPrevious: wipedCount,
           skippedEmpty,
           imported,
-          skipped: 0, // not applicable in re-import strategy
+          skipped: 0,
           errors,
           errorSamples,
         });
