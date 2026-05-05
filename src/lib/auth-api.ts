@@ -11,6 +11,12 @@ function getHeaders() {
   };
 }
 
+// Reusable auth header for other API modules (no Content-Type — caller decides)
+export function authHeaders(): Record<string, string> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export async function login(credentials: LoginCredentials): Promise<{ token: string; user: AuthUser }> {
   const res = await fetch(`${API_URL}/api/auth`, {
     method: 'POST',

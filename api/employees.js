@@ -1,219 +1,176 @@
-import { google } from 'googleapis';
+import { getTursoClient, initSchema } from '../lib/turso.js';
+import { authenticate } from '../lib/auth-middleware.js';
+
+function safeParseJSON(value, fallback) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || value.trim() === '') return fallback;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function rowToEmployee(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    position: row.position || '',
+    email: row.email || '',
+    phone: row.phone || '',
+    address: row.address || '',
+    startDate: row.start_date || '',
+    salary: Number(row.salary) || 0,
+    homeBranch: row.home_branch || '',
+    secondaryBranches: safeParseJSON(row.secondary_branches, []),
+    branchCommissions: safeParseJSON(row.branch_commissions, []),
+    note: row.note || '',
+    isActive: Number(row.is_active) === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 export default async function handler(req, res) {
-  // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const auth = new google.auth.GoogleAuth({
-      credentials: {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n').replace(/"/g, ''),
-      },
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
+    await initSchema();
+    const db = getTursoClient();
 
-    const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || process.env.GOOGLE_SHEETS_ID;
-
-    if (!spreadsheetId) {
-      return res.status(500).json({ error: 'Spreadsheet ID not configured' });
-    }
-
-    const sheetName = 'Employees';
-    const range = `${sheetName}!A:I`; // Updated for branch commissions structure
-
-    // Handle GET request (read employees)
     if (req.method === 'GET') {
-      try {
-        const response = await sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range,
-        });
-        
-        return res.status(200).json({ 
-          data: response.data.values || [],
-          range: response.data.range
-        });
-      } catch (error) {
-        if (error.message.includes('Unable to parse range')) {
-          return res.status(200).json({ 
-            data: [['ID', 'Name', 'Position', 'Email', 'Phone', 'HireDate', 'Salary', 'Status', 'BranchCommissions']],
-            range: `${sheetName}!A1:I1`,
-            message: 'Employees sheet not found, returning headers only'
-          });
-        }
-        throw error;
-      }
+      const result = await db.execute(
+        `SELECT * FROM employees ORDER BY is_active DESC, created_at ASC`
+      );
+      const employees = result.rows.map(rowToEmployee);
+      return res.status(200).json({ data: employees });
     }
 
-    // Handle POST request (add employee)
     if (req.method === 'POST') {
-      const { employee } = req.body;
-      
-      if (!employee) {
-        return res.status(400).json({ error: 'Employee data is required' });
+      const body = req.body?.employee || req.body || {};
+      if (!body.name) {
+        return res.status(400).json({ error: 'name is required' });
       }
 
-      const employeeId = employee.id || `emp_${Date.now()}`;
-      const values = [
-        employeeId,
-        employee.name || '',
-        employee.position || '',
-        employee.email || '',
-        employee.phone || '',
-        employee.hireDate || new Date().toISOString().split('T')[0],
-        parseFloat(employee.salary) || 0, // Ensure salary is stored as number
-        employee.status || 'active',
-        JSON.stringify(employee.branchCommissions || []) // Store branch commissions as JSON
-      ];
+      const authUser = authenticate(req);
+      const id = body.id || `emp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const now = new Date().toISOString();
 
-      try {
-        const response = await sheets.spreadsheets.values.append({
-          spreadsheetId,
-          range,
-          valueInputOption: 'USER_ENTERED',
-          resource: { values: [values] },
-        });
+      await db.execute({
+        sql: `INSERT INTO employees (
+          id, name, position, email, phone, address, start_date, salary,
+          home_branch, secondary_branches, branch_commissions, note, is_active,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          id,
+          body.name,
+          body.position || '',
+          body.email || '',
+          body.phone || '',
+          body.address || '',
+          body.startDate || body.hireDate || now.split('T')[0],
+          Number(body.salary) || 0,
+          body.homeBranch || '',
+          JSON.stringify(Array.isArray(body.secondaryBranches) ? body.secondaryBranches : []),
+          JSON.stringify(Array.isArray(body.branchCommissions) ? body.branchCommissions : []),
+          body.note || '',
+          (body.isActive === false || body.status === 'inactive') ? 0 : 1,
+          now,
+          now,
+        ],
+      });
 
-        return res.status(200).json({ 
-          success: true,
-          employeeId,
-          updatedRows: response.data.updates?.updatedRows || 1
-        });
-      } catch (error) {
-        if (error.message.includes('Unable to parse range')) {
-          return res.status(500).json({ 
-            error: 'Employees sheet not found. Please create Employees sheet in your Google Sheets first.',
-            details: error.message
-          });
-        }
-        throw error;
-      }
+      return res.status(200).json({ success: true, employeeId: id, createdBy: authUser?.name || '' });
     }
 
-    // Handle PUT request (update employee)
     if (req.method === 'PUT') {
-      const { employeeId, updates } = req.body;
-      
+      const { employeeId, updates } = req.body || {};
       if (!employeeId || !updates) {
-        return res.status(400).json({ error: 'Employee ID and updates are required' });
+        return res.status(400).json({ error: 'employeeId and updates are required' });
       }
 
-      try {
-        // Get all data to find the row to update
-        const response = await sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range,
-        });
+      const existing = await db.execute({
+        sql: 'SELECT id FROM employees WHERE id = ?',
+        args: [employeeId],
+      });
+      if (existing.rows.length === 0) {
+        return res.status(404).json({ error: 'Employee not found' });
+      }
 
-        const rows = response.data.values || [];
-        const headerRow = rows[0] || [];
-        const dataRows = rows.slice(1);
-        
-        // Find the employee row
-        const employeeRowIndex = dataRows.findIndex(row => row[0] === employeeId);
-        
-        if (employeeRowIndex === -1) {
-          return res.status(404).json({ error: 'Employee not found' });
+      const sets = [];
+      const args = [];
+      const map = {
+        name: 'name',
+        position: 'position',
+        email: 'email',
+        phone: 'phone',
+        address: 'address',
+        startDate: 'start_date',
+        salary: 'salary',
+        homeBranch: 'home_branch',
+        note: 'note',
+      };
+      for (const [k, col] of Object.entries(map)) {
+        if (updates[k] !== undefined) {
+          sets.push(`${col} = ?`);
+          args.push(k === 'salary' ? Number(updates[k]) || 0 : (updates[k] ?? ''));
         }
-
-        // Update the row data
-        const currentRow = dataRows[employeeRowIndex];
-        const updatedRow = [...currentRow];
-        
-        // Map updates to column positions with proper type conversion
-        if (updates.name !== undefined) updatedRow[1] = updates.name;
-        if (updates.position !== undefined) updatedRow[2] = updates.position;
-        if (updates.email !== undefined) updatedRow[3] = updates.email;
-        if (updates.phone !== undefined) updatedRow[4] = updates.phone;
-        if (updates.salary !== undefined) updatedRow[6] = parseFloat(updates.salary) || 0;
-        if (updates.status !== undefined) updatedRow[7] = updates.status;
-        if (updates.branchCommissions !== undefined) updatedRow[8] = JSON.stringify(updates.branchCommissions || []);
-
-        // Update the specific row
-        const updateRange = `${sheetName}!A${employeeRowIndex + 2}:I${employeeRowIndex + 2}`;
-        await sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: updateRange,
-          valueInputOption: 'USER_ENTERED',
-          resource: { values: [updatedRow] },
-        });
-
-        return res.status(200).json({ 
-          success: true,
-          employeeId,
-          message: 'Employee updated successfully'
-        });
-      } catch (error) {
-        console.error('Update error:', error);
-        return res.status(500).json({ 
-          error: 'Failed to update employee',
-          details: error.message 
-        });
       }
+      if (updates.secondaryBranches !== undefined) {
+        sets.push('secondary_branches = ?');
+        args.push(JSON.stringify(Array.isArray(updates.secondaryBranches) ? updates.secondaryBranches : []));
+      }
+      if (updates.branchCommissions !== undefined) {
+        sets.push('branch_commissions = ?');
+        args.push(JSON.stringify(Array.isArray(updates.branchCommissions) ? updates.branchCommissions : []));
+      }
+      if (updates.isActive !== undefined) {
+        sets.push('is_active = ?');
+        args.push(updates.isActive ? 1 : 0);
+      } else if (updates.status !== undefined) {
+        sets.push('is_active = ?');
+        args.push(updates.status === 'active' ? 1 : 0);
+      }
+
+      sets.push('updated_at = ?');
+      args.push(new Date().toISOString());
+      args.push(employeeId);
+
+      if (sets.length === 1) {
+        return res.status(400).json({ error: 'No valid fields to update' });
+      }
+
+      await db.execute({
+        sql: `UPDATE employees SET ${sets.join(', ')} WHERE id = ?`,
+        args,
+      });
+
+      return res.status(200).json({ success: true, employeeId });
     }
 
-    // Handle DELETE request (delete employee)
     if (req.method === 'DELETE') {
       const { employeeId } = req.query;
-      
       if (!employeeId) {
-        return res.status(400).json({ error: 'Employee ID is required' });
+        return res.status(400).json({ error: 'employeeId is required' });
       }
 
-      try {
-        // Get all data to find the row to delete
-        const response = await sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range,
-        });
+      await db.execute({
+        sql: 'DELETE FROM employees WHERE id = ?',
+        args: [employeeId],
+      });
 
-        const rows = response.data.values || [];
-        const dataRows = rows.slice(1);
-        
-        // Find the employee row
-        const employeeRowIndex = dataRows.findIndex(row => row[0] === employeeId);
-        
-        if (employeeRowIndex === -1) {
-          return res.status(404).json({ error: 'Employee not found' });
-        }
-
-        // Delete the row (Google Sheets API doesn't have direct row deletion, so we'll clear it)
-        const deleteRange = `${sheetName}!A${employeeRowIndex + 2}:I${employeeRowIndex + 2}`;
-        await sheets.spreadsheets.values.clear({
-          spreadsheetId,
-          range: deleteRange,
-        });
-
-        return res.status(200).json({ 
-          success: true,
-          employeeId,
-          message: 'Employee deleted successfully'
-        });
-      } catch (error) {
-        console.error('Delete error:', error);
-        return res.status(500).json({ 
-          error: 'Failed to delete employee',
-          details: error.message 
-        });
-      }
+      return res.status(200).json({ success: true, employeeId });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
-
   } catch (error) {
-    console.error('Employees API Error:', error);
-    return res.status(500).json({ 
-      error: 'Failed to process request',
-      details: error.message 
-    });
+    console.error('Employees API error:', error);
+    return res.status(500).json({ error: 'Failed to process request', details: error.message });
   }
 }

@@ -12,7 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Employee, EmployeeCommissionReport, BranchCommission } from "@/types/employee";
+import { Employee, EmployeeCommissionReport, BranchCommission, SecondaryBranch } from "@/types/employee";
+import { Checkbox } from "@/components/ui/checkbox";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useEmployees } from "@/hooks/use-employees";
 import { useSettings } from "@/hooks/use-settings";
@@ -79,6 +80,8 @@ export function EmployeeManagement() {
     name: "",
     position: "",
     salary: 0,
+    homeBranch: "",
+    secondaryBranches: [] as SecondaryBranch[],
     branchCommissions: [] as BranchCommission[],
     phone: "",
     email: "",
@@ -94,6 +97,8 @@ export function EmployeeManagement() {
       name: formData.name,
       position: formData.position,
       salary: formData.salary,
+      homeBranch: formData.homeBranch,
+      secondaryBranches: formData.secondaryBranches,
       branchCommissions: formData.branchCommissions,
       phone: formData.phone,
       email: formData.email,
@@ -115,6 +120,8 @@ export function EmployeeManagement() {
         name: "",
         position: "",
         salary: 0,
+        homeBranch: "",
+        secondaryBranches: [],
         branchCommissions: [],
         phone: "",
         email: "",
@@ -135,6 +142,8 @@ export function EmployeeManagement() {
       name: employee.name,
       position: employee.position,
       salary: employee.salary,
+      homeBranch: employee.homeBranch || "",
+      secondaryBranches: employee.secondaryBranches || [],
       branchCommissions: employee.branchCommissions || [],
       phone: employee.phone || "",
       email: employee.email || "",
@@ -283,7 +292,7 @@ export function EmployeeManagement() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="salary">เงินเดือน (บาท) *</Label>
                   <Input
@@ -293,6 +302,96 @@ export function EmployeeManagement() {
                     onChange={(e) => setFormData({ ...formData, salary: Number(e.target.value) })}
                     required
                   />
+                </div>
+                <div>
+                  <Label htmlFor="homeBranch">สาขาประจำ</Label>
+                  <Select
+                    value={formData.homeBranch || "__none__"}
+                    onValueChange={(value) => setFormData({ ...formData, homeBranch: value === "__none__" ? "" : value })}
+                  >
+                    <SelectTrigger id="homeBranch">
+                      <SelectValue placeholder="เลือกสาขาประจำ" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">— ไม่ระบุ —</SelectItem>
+                      {(settings.branchesByChannel?.store || settings.branches || []).filter((b: string) => b && b.trim() !== '').map((branch: string) => (
+                        <SelectItem key={`store-${branch}`} value={branch}>
+                          🏬 {branch}
+                        </SelectItem>
+                      ))}
+                      {(settings.branchesByChannel?.online || []).filter((b: string) => b && b.trim() !== '').map((branch: string) => (
+                        <SelectItem key={`online-${branch}`} value={branch}>
+                          🌐 {branch}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">ใช้แบ่งกลุ่มในใบจ่ายเงินเดือน</p>
+                </div>
+              </div>
+
+              {/* Secondary Branches */}
+              <div>
+                <Label className="text-base font-semibold">สาขารอง (ที่ช่วยขาย)</Label>
+                <p className="text-xs text-muted-foreground mb-2">เลือกได้หลายสาขา (ถ้าพนักงานช่วยขายหลายสาขา)</p>
+                <div className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-800 max-h-40 overflow-y-auto space-y-2">
+                  {(() => {
+                    const stores = (settings.branchesByChannel?.store || settings.branches || []).filter((b: string) => b && b.trim() !== '');
+                    const onlines = (settings.branchesByChannel?.online || []).filter((b: string) => b && b.trim() !== '');
+                    const isChecked = (channel: 'store' | 'online', branch: string) =>
+                      formData.secondaryBranches.some(sb => sb.channel === channel && sb.branchOrPlatform === branch);
+                    const toggle = (channel: 'store' | 'online', branch: string) => {
+                      const exists = isChecked(channel, branch);
+                      setFormData({
+                        ...formData,
+                        secondaryBranches: exists
+                          ? formData.secondaryBranches.filter(sb => !(sb.channel === channel && sb.branchOrPlatform === branch))
+                          : [...formData.secondaryBranches, { channel, branchOrPlatform: branch }]
+                      });
+                    };
+                    return (
+                      <>
+                        {stores.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 mb-1">หน้าร้าน</div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {stores.map((branch: string) => (
+                                <label key={`sec-store-${branch}`} className="flex items-center gap-2 text-sm cursor-pointer">
+                                  <Checkbox
+                                    checked={isChecked('store', branch)}
+                                    onCheckedChange={() => toggle('store', branch)}
+                                    disabled={formData.homeBranch === branch}
+                                  />
+                                  <span className={formData.homeBranch === branch ? 'text-muted-foreground line-through' : ''}>
+                                    {branch}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {onlines.length > 0 && (
+                          <div>
+                            <div className="text-xs font-medium text-gray-500 mb-1 mt-2">ออนไลน์</div>
+                            <div className="grid grid-cols-2 gap-2">
+                              {onlines.map((branch: string) => (
+                                <label key={`sec-online-${branch}`} className="flex items-center gap-2 text-sm cursor-pointer">
+                                  <Checkbox
+                                    checked={isChecked('online', branch)}
+                                    onCheckedChange={() => toggle('online', branch)}
+                                    disabled={formData.homeBranch === branch}
+                                  />
+                                  <span className={formData.homeBranch === branch ? 'text-muted-foreground line-through' : ''}>
+                                    {branch}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -455,6 +554,8 @@ export function EmployeeManagement() {
                     name: "",
                     position: "",
                     salary: 0,
+                    homeBranch: "",
+                    secondaryBranches: [],
                     branchCommissions: [],
                     phone: "",
                     email: "",
@@ -565,8 +666,18 @@ export function EmployeeManagement() {
                         <CardDescription className="text-base font-medium text-gray-600 dark:text-gray-300 mb-2">
                           {employee.position}
                         </CardDescription>
-                        <div className="text-sm text-gray-500 dark:text-gray-400">
-                          เริ่มงาน: {formatDate(employee.startDate)}
+                        <div className="flex flex-wrap gap-2 items-center text-sm text-gray-500 dark:text-gray-400">
+                          <span>เริ่มงาน: {formatDate(employee.startDate)}</span>
+                          {employee.homeBranch && (
+                            <Badge variant="outline" className="border-rose-300 text-rose-600 bg-rose-50 dark:bg-rose-900/20">
+                              <MapPin className="h-3 w-3 mr-1" /> {employee.homeBranch}
+                            </Badge>
+                          )}
+                          {Array.isArray(employee.secondaryBranches) && employee.secondaryBranches.length > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              + {employee.secondaryBranches.length} สาขารอง
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

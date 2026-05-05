@@ -4,12 +4,19 @@ export interface BranchCommission {
   commissionRate: number;
 }
 
+export interface SecondaryBranch {
+  channel: 'store' | 'online';
+  branchOrPlatform: string;
+}
+
 export interface Employee {
   id: string;
   name: string;
   position: string;
   salary: number;
-  branchCommissions: BranchCommission[]; // ค่าคอมตามสาขา/แพลตฟอร์ม
+  homeBranch: string;                       // สาขาประจำ — ใช้กำหนดสังกัด/แบ่งกลุ่มในใบเงินเดือน
+  secondaryBranches: SecondaryBranch[];     // สาขารอง — ใช้กำหนดสาขาที่พนักงานช่วยขายเพิ่ม
+  branchCommissions: BranchCommission[];    // อัตราค่าคอมตามสาขา/แพลตฟอร์ม
   startDate: string;
   isActive: boolean;
   phone?: string;
@@ -23,6 +30,8 @@ export interface Employee {
 export interface EmployeeCommissionReport {
   employeeId: string;
   employeeName: string;
+  position?: string;
+  homeBranch?: string;
   period: string;
   storeSales: number;
   onlineSales: number;
@@ -31,5 +40,5 @@ export interface EmployeeCommissionReport {
   totalCommission: number;
   salary: number;
   totalEarnings: number;
-  branchCommissions?: BranchCommission[]; // เพิ่มข้อมูลการตั้งค่าคอมมิชชั่น
+  branchCommissions?: BranchCommission[];
 }

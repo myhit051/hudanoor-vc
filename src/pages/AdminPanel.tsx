@@ -18,6 +18,7 @@ const MENU_OPTIONS = [
   { id: 'stock-inventory', label: 'สต๊อกคงเหลือ' },
   { id: 'task-reminder', label: 'Task Reminder' },
   { id: 'employees', label: 'จัดการพนักงาน' },
+  { id: 'payroll', label: 'จ่ายเงินเดือน (Admin เท่านั้น)' },
   { id: 'settings', label: 'การตั้งค่า' },
 ];
 

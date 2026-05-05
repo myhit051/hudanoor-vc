@@ -19,7 +19,8 @@ import {
   Package,
   LogOut,
   ShieldAlert,
-  History
+  History,
+  Wallet
 } from "lucide-react";
 
 interface SidebarProps {
@@ -45,6 +46,12 @@ const menuGroups = [
       { id: "stock-inventory",  label: "สต๊อกคงเหลือ",    icon: Package },
       { id: "task-reminder",    label: "Task Reminder",    icon: CheckSquare },
       { id: "employees",        label: "จัดการพนักงาน",   icon: Users },
+    ],
+  },
+  {
+    label: "การเงิน",
+    items: [
+      { id: "payroll",          label: "จ่ายเงินเดือน",    icon: Wallet, adminOnly: true },
     ],
   },
   {
@@ -111,10 +118,11 @@ export function Sidebar({ currentPage, onPageChange, onAddRecord }: SidebarProps
       {/* Navigation Groups */}
       <nav className="flex-1 p-3 space-y-4 overflow-y-auto">
         {menuGroups.map((group) => {
-          // Filter items based on allowedMenus
-          const filteredItems = group.items.filter(item => 
-            isAdmin || user?.allowedMenus?.includes(item.id)
-          );
+          // Filter items based on allowedMenus + adminOnly flag
+          const filteredItems = group.items.filter((item: any) => {
+            if (item.adminOnly) return isAdmin;
+            return isAdmin || user?.allowedMenus?.includes(item.id);
+          });
 
           // Add Admin Panel item for admin
           if (group.label === "ระบบ" && isAdmin) {
