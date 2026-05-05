@@ -321,28 +321,38 @@ export default async function handler(req, res) {
 
       // Import legacy sales from Google Sheets `รายรับ` into Turso `sales_orders`
       // Idempotent: ID = legacy_<sheet_id>; existing rows are skipped.
+      // Optimized: bulk-fetch existing IDs + batch inserts to fit serverless timeout.
       if (req.query.action === 'import-sales' || req.body?.action === 'import-sales') {
         const rows = await readLegacyIncomeSheet();
         const dataRows = rows.slice(1).filter((r) => r[0] && String(r[0]).trim() !== '');
         const now = new Date().toISOString();
-        let imported = 0;
-        let skipped = 0;
-        let errors = 0;
         const errorSamples = [];
+        let errors = 0;
 
+        // Step 1 — bulk check which IDs already exist (chunked to avoid huge IN clauses)
+        const allIds = dataRows.map((r) => `legacy_${String(r[0]).trim()}`);
+        const existing = new Set();
+        const checkChunkSize = 200;
+        for (let i = 0; i < allIds.length; i += checkChunkSize) {
+          const chunk = allIds.slice(i, i + checkChunkSize);
+          const placeholders = chunk.map(() => '?').join(',');
+          const r = await db.execute({
+            sql: `SELECT id FROM sales_orders WHERE id IN (${placeholders})`,
+            args: chunk,
+          });
+          for (const row of r.rows) existing.add(row.id);
+        }
+
+        const skipped = existing.size;
+
+        // Step 2 — build INSERT batch for new rows only
+        const inserts = [];
         for (const row of dataRows) {
           const sheetId = String(row[0]).trim();
           const importId = `legacy_${sheetId}`;
-          try {
-            const exists = await db.execute({
-              sql: 'SELECT 1 FROM sales_orders WHERE id = ?',
-              args: [importId],
-            });
-            if (exists.rows.length > 0) {
-              skipped++;
-              continue;
-            }
+          if (existing.has(importId)) continue;
 
+          try {
             const date = String(row[1] || '').trim() || now.split('T')[0];
             const channel = normalizeChannel(row[2]);
             const branch = String(row[3] || '').trim();
@@ -354,7 +364,7 @@ export default async function handler(req, res) {
             const noteCombined = origNote ? `นำเข้าจาก Sheet | ${origNote}` : 'นำเข้าจาก Sheet';
             const createdAt = String(row[9] || '').trim() || now;
 
-            await db.execute({
+            inserts.push({
               sql: `INSERT INTO sales_orders (
                 id, date, channel, branch_or_platform, sku, product_name, color, size,
                 quantity, unit_price, discount_type, discount_value, discount_amount,
@@ -366,10 +376,25 @@ export default async function handler(req, res) {
                 unitPrice, total, noteCombined, null, createdAt, 'sheet-import', `LEGACY-${sheetId}`,
               ],
             });
-            imported++;
           } catch (e) {
             errors++;
             if (errorSamples.length < 5) errorSamples.push({ sheetId, message: e.message });
+          }
+        }
+
+        // Step 3 — execute batches (parallel chunks for speed)
+        let imported = 0;
+        const batchSize = 50;
+        for (let i = 0; i < inserts.length; i += batchSize) {
+          const batch = inserts.slice(i, i + batchSize);
+          try {
+            await db.batch(batch, 'write');
+            imported += batch.length;
+          } catch (e) {
+            errors += batch.length;
+            if (errorSamples.length < 5) {
+              errorSamples.push({ sheetId: `batch ${i}-${i + batch.length}`, message: e.message });
+            }
           }
         }
 
