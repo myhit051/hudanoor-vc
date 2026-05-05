@@ -82,6 +82,37 @@ export async function reopenPayrollRun(runId: string) {
   return handleJson(res);
 }
 
+export interface ImportPreview {
+  totalInSheet: number;
+  alreadyImported: number;
+  willImport: number;
+}
+
+export interface ImportResult {
+  success: boolean;
+  totalInSheet: number;
+  imported: number;
+  skipped: number;
+  errors: number;
+  errorSamples?: Array<{ sheetId: string; message: string }>;
+}
+
+export async function previewLegacySalesImport(): Promise<ImportPreview> {
+  const res = await fetch(`${API_BASE}/payroll?action=import-sales-preview`, {
+    headers: { ...authHeaders() },
+  });
+  return handleJson(res);
+}
+
+export async function importLegacySales(): Promise<ImportResult> {
+  const res = await fetch(`${API_BASE}/payroll?action=import-sales`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({}),
+  });
+  return handleJson(res);
+}
+
 export async function deletePayrollRun(runId: string) {
   const res = await fetch(`${API_BASE}/payroll?runId=${encodeURIComponent(runId)}`, {
     method: 'DELETE',

@@ -1,5 +1,31 @@
+import { google } from 'googleapis';
 import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate, requireAdmin } from '../lib/auth-middleware.js';
+
+// Read all rows from a Google Sheet range (used for legacy import)
+async function readLegacyIncomeSheet() {
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_CLIENT_EMAIL || process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n').replace(/"/g, ''),
+    },
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+  });
+  const sheets = google.sheets({ version: 'v4', auth });
+  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || process.env.GOOGLE_SHEETS_ID;
+  if (!spreadsheetId) throw new Error('Spreadsheet ID not configured');
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: 'รายรับ!A:K',
+  });
+  return response.data.values || [];
+}
+
+function normalizeChannel(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  if (s === 'online' || s.includes('ออนไลน์')) return 'online';
+  return 'store';
+}
 
 function safeParseJSON(value, fallback) {
   if (Array.isArray(value)) return value;
@@ -115,6 +141,32 @@ export default async function handler(req, res) {
     // ─── GET ───────────────────────────────────────────
     if (req.method === 'GET') {
       const { period, runId, action } = req.query;
+
+      // Preview legacy sales import — count what will be imported vs skipped
+      if (action === 'import-sales-preview') {
+        const rows = await readLegacyIncomeSheet();
+        const dataRows = rows.slice(1).filter((r) => r[0] && String(r[0]).trim() !== '');
+        const ids = dataRows.map((r) => `legacy_${r[0]}`);
+        let alreadyImported = 0;
+        if (ids.length > 0) {
+          // Chunked check (limit args per query)
+          const chunkSize = 100;
+          for (let i = 0; i < ids.length; i += chunkSize) {
+            const chunk = ids.slice(i, i + chunkSize);
+            const placeholders = chunk.map(() => '?').join(',');
+            const r = await db.execute({
+              sql: `SELECT COUNT(*) AS c FROM sales_orders WHERE id IN (${placeholders})`,
+              args: chunk,
+            });
+            alreadyImported += Number(r.rows[0]?.c) || 0;
+          }
+        }
+        return res.status(200).json({
+          totalInSheet: dataRows.length,
+          alreadyImported,
+          willImport: dataRows.length - alreadyImported,
+        });
+      }
 
       // Commission report (replaces former /api/commission-reports endpoint)
       if (action === 'report') {
@@ -260,11 +312,75 @@ export default async function handler(req, res) {
       return res.status(200).json({ runs: result.rows.map(rowToRun) });
     }
 
-    // ─── POST: create or regenerate a payroll run ─────────
+    // ─── POST: create or regenerate a payroll run / import legacy sales ─────────
     if (req.method === 'POST') {
       const authUser = authenticate(req);
       if (!requireAdmin(authUser)) {
         return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      // Import legacy sales from Google Sheets `รายรับ` into Turso `sales_orders`
+      // Idempotent: ID = legacy_<sheet_id>; existing rows are skipped.
+      if (req.query.action === 'import-sales' || req.body?.action === 'import-sales') {
+        const rows = await readLegacyIncomeSheet();
+        const dataRows = rows.slice(1).filter((r) => r[0] && String(r[0]).trim() !== '');
+        const now = new Date().toISOString();
+        let imported = 0;
+        let skipped = 0;
+        let errors = 0;
+        const errorSamples = [];
+
+        for (const row of dataRows) {
+          const sheetId = String(row[0]).trim();
+          const importId = `legacy_${sheetId}`;
+          try {
+            const exists = await db.execute({
+              sql: 'SELECT 1 FROM sales_orders WHERE id = ?',
+              args: [importId],
+            });
+            if (exists.rows.length > 0) {
+              skipped++;
+              continue;
+            }
+
+            const date = String(row[1] || '').trim() || now.split('T')[0];
+            const channel = normalizeChannel(row[2]);
+            const branch = String(row[3] || '').trim();
+            const productName = String(row[4] || '').trim() || '(ไม่ระบุ)';
+            const qty = parseInt(row[6]) || 1;
+            const total = parseFloat(row[7]) || 0;
+            const unitPrice = qty > 0 ? total / qty : 0;
+            const origNote = String(row[8] || '').trim();
+            const noteCombined = origNote ? `นำเข้าจาก Sheet | ${origNote}` : 'นำเข้าจาก Sheet';
+            const createdAt = String(row[9] || '').trim() || now;
+
+            await db.execute({
+              sql: `INSERT INTO sales_orders (
+                id, date, channel, branch_or_platform, sku, product_name, color, size,
+                quantity, unit_price, discount_type, discount_value, discount_amount,
+                final_unit_price, total_amount, note, stock_in_id, created_at, recorded_by, order_id
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              args: [
+                importId, date, channel, branch, 'LEGACY', productName, '', '',
+                qty, unitPrice, 'amount', 0, 0,
+                unitPrice, total, noteCombined, null, createdAt, 'sheet-import', `LEGACY-${sheetId}`,
+              ],
+            });
+            imported++;
+          } catch (e) {
+            errors++;
+            if (errorSamples.length < 5) errorSamples.push({ sheetId, message: e.message });
+          }
+        }
+
+        return res.status(200).json({
+          success: true,
+          totalInSheet: dataRows.length,
+          imported,
+          skipped,
+          errors,
+          errorSamples,
+        });
       }
 
       const { period, regenerate, note } = req.body || {};

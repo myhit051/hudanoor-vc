@@ -15,12 +15,16 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   Wallet, Calculator, TrendingUp, FileDown, CheckCircle2, Loader2, RefreshCw,
-  Lock, Unlock, AlertCircle, Receipt, Trash2, Pencil, Building2,
+  Lock, Unlock, AlertCircle, Receipt, Trash2, Pencil, Building2, DownloadCloud,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { usePayrollByPeriod, usePayrollMutations, usePayrollRuns } from "@/hooks/use-payroll";
 import { PayslipDialog } from "@/components/payroll/PayslipDialog";
 import { PayrollItem } from "@/types/payroll";
+import {
+  ImportPreview, ImportResult, importLegacySales, previewLegacySalesImport,
+} from "@/lib/vercel-payroll";
+import { toast } from "@/hooks/use-toast";
 
 const monthLabel = (period: string) => {
   if (!period) return "";
@@ -55,6 +59,11 @@ export default function Payroll() {
   const [adjustItem, setAdjustItem] = useState<PayrollItem | null>(null);
   const [adjustValue, setAdjustValue] = useState(0);
   const [adjustNote, setAdjustNote] = useState("");
+
+  const [importOpen, setImportOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
 
   const isFinalized = run?.status === "finalized";
   const periodHasRun = !!run;
@@ -118,6 +127,40 @@ export default function Payroll() {
     setPayslipOpen(true);
   };
 
+  const openImportDialog = async () => {
+    setImportOpen(true);
+    setImportPreview(null);
+    setImportResult(null);
+    setImportLoading(true);
+    try {
+      const preview = await previewLegacySalesImport();
+      setImportPreview(preview);
+    } catch (err: any) {
+      toast({ title: "ดึงข้อมูล Sheet ไม่สำเร็จ", description: err.message || "", variant: "destructive" });
+      setImportOpen(false);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const runImport = async () => {
+    setImportLoading(true);
+    try {
+      const result = await importLegacySales();
+      setImportResult(result);
+      toast({
+        title: "นำเข้ายอดขายเสร็จสิ้น",
+        description: `เพิ่มใหม่ ${result.imported} · ข้าม ${result.skipped} · ผิดพลาด ${result.errors}`,
+      });
+      // Refresh current period (commission may change)
+      await refetch();
+    } catch (err: any) {
+      toast({ title: "นำเข้าไม่สำเร็จ", description: err.message || "", variant: "destructive" });
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -150,6 +193,10 @@ export default function Payroll() {
           </Select>
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
             {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </Button>
+          <Button variant="outline" size="sm" onClick={openImportDialog} title="นำเข้ายอดขายเก่าจาก Google Sheet">
+            <DownloadCloud className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">นำเข้ายอดขายเก่า</span>
           </Button>
         </div>
       </div>
@@ -428,6 +475,99 @@ export default function Payroll() {
         item={activeItem}
         run={run}
       />
+
+      {/* Import legacy sales Dialog */}
+      <Dialog open={importOpen} onOpenChange={(o) => { if (!importLoading) setImportOpen(o); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DownloadCloud className="h-5 w-5 text-rose-500" />
+              นำเข้ายอดขายเก่าจาก Google Sheet
+            </DialogTitle>
+            <DialogDescription>
+              ดึงข้อมูลยอดขายเก่าจาก Sheet "รายรับ" เข้าฐานข้อมูลใหม่ — เพื่อใช้คำนวณค่าคอมย้อนหลัง
+            </DialogDescription>
+          </DialogHeader>
+
+          {importLoading && !importPreview && !importResult ? (
+            <div className="py-8 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">กำลังตรวจสอบข้อมูลใน Sheet...</p>
+            </div>
+          ) : importResult ? (
+            <div className="space-y-3">
+              <div className="rounded-lg border bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 p-4">
+                <div className="flex items-center gap-2 text-emerald-700 mb-2">
+                  <CheckCircle2 className="h-5 w-5" />
+                  <span className="font-semibold">นำเข้าเสร็จสิ้น</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <div className="text-2xl font-bold text-emerald-700">{importResult.imported}</div>
+                    <div className="text-xs text-emerald-600">เพิ่มใหม่</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-gray-500">{importResult.skipped}</div>
+                    <div className="text-xs text-gray-500">ข้าม (ซ้ำ)</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold text-red-500">{importResult.errors}</div>
+                    <div className="text-xs text-red-500">ผิดพลาด</div>
+                  </div>
+                </div>
+              </div>
+              {importResult.errorSamples && importResult.errorSamples.length > 0 && (
+                <div className="text-xs bg-red-50 border border-red-200 rounded p-2 space-y-1">
+                  <div className="font-semibold text-red-700">ตัวอย่าง error:</div>
+                  {importResult.errorSamples.map((e, i) => (
+                    <div key={i} className="text-red-600">• {e.sheetId}: {e.message}</div>
+                  ))}
+                </div>
+              )}
+              <div className="text-xs text-muted-foreground">
+                💡 แนะนำ: กลับไปหน้ารอบจ่ายเงินเดือน → กด <strong>"คำนวณใหม่"</strong> เพื่อรวมยอดที่นำเข้าเข้ามา
+              </div>
+            </div>
+          ) : importPreview ? (
+            <div className="space-y-3">
+              <div className="rounded-lg border bg-card p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">พบใน Sheet ทั้งหมด</span>
+                  <span className="font-semibold">{importPreview.totalInSheet} รายการ</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">นำเข้าแล้วก่อนหน้า</span>
+                  <span className="font-semibold text-gray-500">{importPreview.alreadyImported} รายการ</span>
+                </div>
+                <div className="flex justify-between border-t pt-2">
+                  <span className="font-medium">จะเพิ่มใหม่</span>
+                  <span className="font-bold text-rose-600 text-lg">{importPreview.willImport} รายการ</span>
+                </div>
+              </div>
+              {importPreview.willImport === 0 ? (
+                <div className="text-center text-sm text-muted-foreground bg-gray-50 rounded p-3">
+                  ✓ ข้อมูลทั้งหมดถูกนำเข้าแล้ว ไม่มีอะไรต้องเพิ่ม
+                </div>
+              ) : (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2.5">
+                  ⚠️ ยอดขายที่นำเข้าจะใช้ <code className="bg-white px-1 rounded">SKU = LEGACY</code> และ note ระบุว่ามาจาก Sheet — ปลอดภัยที่จะรันซ้ำ (ของซ้ำจะถูกข้าม)
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importLoading}>
+              {importResult ? "ปิด" : "ยกเลิก"}
+            </Button>
+            {importPreview && !importResult && importPreview.willImport > 0 && (
+              <Button onClick={runImport} disabled={importLoading} className="bg-gradient-to-r from-rose-500 to-pink-500">
+                {importLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> กำลังนำเข้า...</> : <><DownloadCloud className="h-4 w-4 mr-2" /> นำเข้าตอนนี้</>}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Adjustment Dialog */}
       <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
