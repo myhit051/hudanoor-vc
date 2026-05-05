@@ -16,9 +16,9 @@ export interface CommissionReportsResponse {
 // Get commission reports for a specific period
 export const getCommissionReports = async (period?: string): Promise<CommissionReportsResponse> => {
   try {
-    const url = period 
-      ? `${API_BASE}/commission-reports?period=${period}`
-      : `${API_BASE}/commission-reports`;
+    const url = period
+      ? `${API_BASE}/payroll?action=report&period=${period}`
+      : `${API_BASE}/payroll?action=report`;
       
     const response = await fetch(url);
     
