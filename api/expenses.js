@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate, requireAdmin } from '../lib/auth-middleware.js';
+import { parseSheetDate } from '../lib/sheet-date.js';
 
 async function readLegacyExpenseSheet() {
   const auth = new google.auth.GoogleAuth({
@@ -16,6 +17,8 @@ async function readLegacyExpenseSheet() {
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: 'รายจ่าย!A:J',
+    valueRenderOption: 'UNFORMATTED_VALUE',
+    dateTimeRenderOption: 'SERIAL_NUMBER',
   });
   return response.data.values || [];
 }
@@ -49,7 +52,7 @@ export default async function handler(req, res) {
         let skippedEmpty = 0;
         for (const row of dataRows) {
           const cost = parseFloat(row[6]) || 0;
-          const date = String(row[1] || '').trim();
+          const date = parseSheetDate(row[1]);
           if (!date || cost <= 0) skippedEmpty++;
           else validRows++;
         }
@@ -105,7 +108,7 @@ export default async function handler(req, res) {
 
         const inserts = [];
         dataRows.forEach((row, idx) => {
-          const date = String(row[1] || '').trim();
+          const date = parseSheetDate(row[1]);
           const cost = parseFloat(row[6]) || 0;
           if (!date || cost <= 0) { skippedEmpty++; return; }
           const rowNum = idx + 2;

@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate, requireAdmin } from '../lib/auth-middleware.js';
+import { parseSheetDate } from '../lib/sheet-date.js';
 
 // Read all rows from a Google Sheet range (used for legacy import).
 // Use UNFORMATTED_VALUE so date cells come back as Excel serial numbers
@@ -24,49 +25,6 @@ async function readLegacyIncomeSheet() {
     dateTimeRenderOption: 'SERIAL_NUMBER',
   });
   return response.data.values || [];
-}
-
-// Convert Sheet date cell → ISO YYYY-MM-DD.
-// Handles: Excel serial number (preferred), ISO string, DD/MM/YYYY,
-// DD-MM-YYYY, and Thai Buddhist years (subtracts 543 if year > 2400).
-function parseSheetDate(raw) {
-  if (raw == null || raw === '') return '';
-  // Excel serial number — days since 1899-12-30 (1900 system).
-  if (typeof raw === 'number') {
-    const ms = Math.round((raw - 25569) * 86400 * 1000);
-    const d = new Date(ms);
-    if (isNaN(d.getTime())) return '';
-    const y = d.getUTCFullYear();
-    const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(d.getUTCDate()).padStart(2, '0');
-    return `${y}-${mo}-${day}`;
-  }
-  const s = String(raw).trim();
-  if (!s) return '';
-  // Already ISO
-  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (m) {
-    let [, y, mo, day] = m;
-    if (Number(y) > 2400) y = String(Number(y) - 543);
-    return `${y}-${mo.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  // DD/MM/YYYY or D/M/YYYY (with - or / or .)
-  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
-  if (m) {
-    let [, day, mo, y] = m;
-    if (y.length === 2) y = `20${y}`;
-    if (Number(y) > 2400) y = String(Number(y) - 543);
-    return `${y}-${mo.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-  // Last-resort fallback
-  const d = new Date(s);
-  if (!isNaN(d.getTime())) {
-    const y = d.getFullYear();
-    const mo = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${mo}-${day}`;
-  }
-  return '';
 }
 
 function normalizeChannel(raw) {
