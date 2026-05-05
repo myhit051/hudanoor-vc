@@ -262,80 +262,141 @@ export function EmployeeManagement() {
               เพิ่มพนักงาน
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {editingEmployee ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงานใหม่"}
-              </DialogTitle>
-              <DialogDescription>
-                กรอกข้อมูลพนักงาน เงินเดือน สาขาประจำ/รอง และอัตราค่าคอม
-              </DialogDescription>
+          <DialogContent className="max-w-3xl p-0 max-h-[92vh] flex flex-col">
+            <DialogHeader className="px-6 pt-6 pb-4 border-b">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-pink-500 flex items-center justify-center text-white">
+                  <Users className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl">
+                    {editingEmployee ? "แก้ไขข้อมูลพนักงาน" : "เพิ่มพนักงานใหม่"}
+                  </DialogTitle>
+                  <DialogDescription className="mt-0.5">
+                    {editingEmployee ? `กำลังแก้ไข: ${editingEmployee.name}` : "กรอกข้อมูลพนักงานพร้อมตั้งค่าเงินเดือนและคอม"}
+                  </DialogDescription>
+                </div>
+              </div>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="name">ชื่อ-นามสกุล *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="position">ตำแหน่ง *</Label>
-                  <Input
-                    id="position"
-                    value={formData.position}
-                    onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="salary">เงินเดือน (บาท) *</Label>
-                  <Input
-                    id="salary"
-                    type="number"
-                    value={formData.salary}
-                    onChange={(e) => setFormData({ ...formData, salary: Number(e.target.value) })}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="homeBranch">สาขาประจำ</Label>
-                  <Select
-                    value={formData.homeBranch || "__none__"}
-                    onValueChange={(value) => setFormData({ ...formData, homeBranch: value === "__none__" ? "" : value })}
-                  >
-                    <SelectTrigger id="homeBranch">
-                      <SelectValue placeholder="เลือกสาขาประจำ" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">— ไม่ระบุ —</SelectItem>
-                      {(settings.branchesByChannel?.store || settings.branches || []).filter((b: string) => b && b.trim() !== '').map((branch: string) => (
-                        <SelectItem key={`store-${branch}`} value={branch}>
-                          🏬 {branch}
-                        </SelectItem>
-                      ))}
-                      {(settings.branchesByChannel?.online || []).filter((b: string) => b && b.trim() !== '').map((branch: string) => (
-                        <SelectItem key={`online-${branch}`} value={branch}>
-                          🌐 {branch}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground mt-1">ใช้แบ่งกลุ่มในใบจ่ายเงินเดือน</p>
-                </div>
-              </div>
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
-              {/* Secondary Branches */}
-              <div>
-                <Label className="text-base font-semibold">สาขารอง (ที่ช่วยขาย)</Label>
-                <p className="text-xs text-muted-foreground mb-2">เลือกได้หลายสาขา (ถ้าพนักงานช่วยขายหลายสาขา)</p>
-                <div className="border rounded-lg p-3 bg-gray-50 dark:bg-gray-800 max-h-40 overflow-y-auto space-y-2">
+              {/* SECTION 1 — ข้อมูลส่วนตัว */}
+              <section className="rounded-xl border bg-card p-4 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Users className="h-4 w-4 text-rose-500" />
+                  <h3 className="font-semibold text-sm">ข้อมูลส่วนตัว</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="name">ชื่อ-นามสกุล <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="เช่น สมหญิง ใจดี"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="position">ตำแหน่ง <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="position"
+                      value={formData.position}
+                      onChange={(e) => setFormData({ ...formData, position: e.target.value })}
+                      placeholder="เช่น พนักงานขาย"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone">เบอร์โทรศัพท์</Label>
+                    <div className="relative">
+                      <Phone className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="phone"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        placeholder="08X-XXX-XXXX"
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">อีเมล</Label>
+                    <div className="relative">
+                      <Mail className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        placeholder="name@example.com"
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* SECTION 2 — ค่าตอบแทน + สาขา */}
+              <section className="rounded-xl border bg-card p-4 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Calculator className="h-4 w-4 text-emerald-500" />
+                  <h3 className="font-semibold text-sm">ค่าตอบแทนและสาขา</h3>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="salary">เงินเดือน (บาท) <span className="text-red-500">*</span></Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">฿</span>
+                      <Input
+                        id="salary"
+                        type="number"
+                        value={formData.salary || ''}
+                        onChange={(e) => setFormData({ ...formData, salary: Number(e.target.value) })}
+                        placeholder="0"
+                        className="pl-7"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="homeBranch">สาขาประจำ</Label>
+                    <Select
+                      value={formData.homeBranch || "__none__"}
+                      onValueChange={(value) => setFormData({ ...formData, homeBranch: value === "__none__" ? "" : value })}
+                    >
+                      <SelectTrigger id="homeBranch">
+                        <SelectValue placeholder="เลือกสาขาประจำ" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— ไม่ระบุ —</SelectItem>
+                        {(settings.branchesByChannel?.store || settings.branches || []).filter((b: string) => b && b.trim() !== '').map((branch: string) => (
+                          <SelectItem key={`store-${branch}`} value={branch}>
+                            <span className="inline-flex items-center gap-2"><Store className="h-3.5 w-3.5 text-blue-500" /> {branch}</span>
+                          </SelectItem>
+                        ))}
+                        {(settings.branchesByChannel?.online || []).filter((b: string) => b && b.trim() !== '').map((branch: string) => (
+                          <SelectItem key={`online-${branch}`} value={branch}>
+                            <span className="inline-flex items-center gap-2"><Globe className="h-3.5 w-3.5 text-purple-500" /> {branch}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">ใช้แบ่งกลุ่มในใบจ่ายเงินเดือน</p>
+                  </div>
+                </div>
+
+                {/* Secondary branches as chips */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">สาขารอง (ที่ช่วยขาย)</Label>
+                    {formData.secondaryBranches.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">{formData.secondaryBranches.length} สาขา</Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">คลิกเพื่อเพิ่ม/ลบ สาขาที่พนักงานช่วยขาย</p>
                   {(() => {
                     const stores = (settings.branchesByChannel?.store || settings.branches || []).filter((b: string) => b && b.trim() !== '');
                     const onlines = (settings.branchesByChannel?.online || []).filter((b: string) => b && b.trim() !== '');
@@ -350,235 +411,254 @@ export function EmployeeManagement() {
                           : [...formData.secondaryBranches, { channel, branchOrPlatform: branch }]
                       });
                     };
+                    const Chip = ({ active, disabled, onClick, icon, label }: any) => (
+                      <button
+                        type="button"
+                        onClick={onClick}
+                        disabled={disabled}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                          disabled
+                            ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed line-through"
+                            : active
+                              ? "border-rose-500 bg-rose-500 text-white shadow-sm hover:bg-rose-600"
+                              : "border-gray-200 bg-white text-gray-700 hover:border-rose-300 hover:bg-rose-50"
+                        }`}
+                      >
+                        <span className="inline-flex items-center gap-1.5">{icon}{label}</span>
+                      </button>
+                    );
                     return (
-                      <>
+                      <div className="space-y-3">
                         {stores.length > 0 && (
                           <div>
-                            <div className="text-xs font-medium text-gray-500 mb-1">หน้าร้าน</div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                              <Store className="h-3 w-3" /> หน้าร้าน
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
                               {stores.map((branch: string) => (
-                                <label key={`sec-store-${branch}`} className="flex items-center gap-2 text-sm cursor-pointer">
-                                  <Checkbox
-                                    checked={isChecked('store', branch)}
-                                    onCheckedChange={() => toggle('store', branch)}
-                                    disabled={formData.homeBranch === branch}
-                                  />
-                                  <span className={formData.homeBranch === branch ? 'text-muted-foreground line-through' : ''}>
-                                    {branch}
-                                  </span>
-                                </label>
+                                <Chip
+                                  key={`sec-store-${branch}`}
+                                  active={isChecked('store', branch)}
+                                  disabled={formData.homeBranch === branch}
+                                  onClick={() => toggle('store', branch)}
+                                  label={branch}
+                                />
                               ))}
                             </div>
                           </div>
                         )}
                         {onlines.length > 0 && (
                           <div>
-                            <div className="text-xs font-medium text-gray-500 mb-1 mt-2">ออนไลน์</div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="text-[11px] font-semibold text-purple-600 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                              <Globe className="h-3 w-3" /> ออนไลน์
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
                               {onlines.map((branch: string) => (
-                                <label key={`sec-online-${branch}`} className="flex items-center gap-2 text-sm cursor-pointer">
-                                  <Checkbox
-                                    checked={isChecked('online', branch)}
-                                    onCheckedChange={() => toggle('online', branch)}
-                                    disabled={formData.homeBranch === branch}
-                                  />
-                                  <span className={formData.homeBranch === branch ? 'text-muted-foreground line-through' : ''}>
-                                    {branch}
-                                  </span>
-                                </label>
+                                <Chip
+                                  key={`sec-online-${branch}`}
+                                  active={isChecked('online', branch)}
+                                  disabled={formData.homeBranch === branch}
+                                  onClick={() => toggle('online', branch)}
+                                  label={branch}
+                                />
                               ))}
                             </div>
                           </div>
                         )}
-                      </>
+                      </div>
                     );
                   })()}
                 </div>
-              </div>
+              </section>
 
-              {/* Branch Commissions Section */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <Label className="text-base font-semibold">ค่าคอมตามสาขา/แพลตฟอร์ม</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addBranchCommission}
-                    className="text-xs"
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    เพิ่มสาขา
+              {/* SECTION 3 — ค่าคอมมิชชั่น */}
+              <section className="rounded-xl border bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-amber-500" />
+                    <h3 className="font-semibold text-sm">ค่าคอมตามสาขา/แพลตฟอร์ม</h3>
+                    {formData.branchCommissions.length > 0 && (
+                      <Badge variant="secondary" className="text-xs">{formData.branchCommissions.length} รายการ</Badge>
+                    )}
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={addBranchCommission}>
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    เพิ่ม
                   </Button>
                 </div>
 
+                <div className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-2.5">
+                  💡 <strong>เคล็ดลับ:</strong> ถ้าเลือก "<strong>ทุกสาขา</strong>" → พนักงานจะได้คอมจากทุกยอดขายในช่องทางนั้น
+                </div>
+
                 {formData.branchCommissions.length === 0 ? (
-                  <div className="text-center py-4 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
-                    ยังไม่มีการตั้งค่าคอมมิชชั่น คลิก "เพิ่มสาขา" เพื่อเริ่มต้น
+                  <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                    <TrendingUp className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+                    <p className="text-sm text-muted-foreground">ยังไม่มีการตั้งค่าคอมมิชชั่น</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">คลิก "เพิ่ม" เพื่อกำหนดอัตรา</p>
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-40 overflow-y-auto">
-                    {formData.branchCommissions.map((commission, index) => (
-                      <div key={index} className="space-y-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <div className="flex gap-2 items-end">
-                          <div className="flex-1">
-                            <Label className="text-xs">ช่องทางขาย</Label>
-                            <Select
-                              value={commission.channel}
-                              onValueChange={(value: 'store' | 'online') => updateBranchCommission(index, 'channel', value)}
-                            >
-                              <SelectTrigger className="text-sm">
-                                <SelectValue placeholder="เลือกช่องทาง" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="store">หน้าร้าน</SelectItem>
-                                <SelectItem value="online">ออนไลน์</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="w-24">
-                            <Label className="text-xs">คอม (%)</Label>
-                            <Input
-                              type="number"
-                              step="0.1"
-                              placeholder="0.0"
-                              value={commission.commissionRate || ''}
-                              onChange={(e) => updateBranchCommission(index, 'commissionRate', Number(e.target.value) || 0)}
-                              className="text-sm"
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeBranchCommission(index)}
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
+                  <div className="space-y-2">
+                    {formData.branchCommissions.map((commission, index) => {
+                      const branchOptions = commission.channel === 'store'
+                        ? (settings.branchesByChannel?.store || settings.branches || [])
+                        : (settings.branchesByChannel?.online || []);
+                      const validBranches = branchOptions.filter((b: string) => b && b.trim() !== '');
+                      return (
+                        <div key={index} className="border rounded-lg p-3 bg-gradient-to-br from-amber-50/50 to-orange-50/50 dark:from-amber-900/10 dark:to-orange-900/10">
+                          <div className="grid grid-cols-12 gap-2 items-end">
+                            {/* Channel */}
+                            <div className="col-span-12 sm:col-span-3 space-y-1">
+                              <Label className="text-[11px] font-medium text-muted-foreground">ช่องทาง</Label>
+                              <Select
+                                value={commission.channel}
+                                onValueChange={(value: 'store' | 'online') => updateBranchCommission(index, 'channel', value)}
+                              >
+                                <SelectTrigger className="h-9 text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="store"><span className="inline-flex items-center gap-2"><Store className="h-3.5 w-3.5 text-blue-500" /> หน้าร้าน</span></SelectItem>
+                                  <SelectItem value="online"><span className="inline-flex items-center gap-2"><Globe className="h-3.5 w-3.5 text-purple-500" /> ออนไลน์</span></SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
 
-                        {commission.channel && (
-                          <div>
-                            <Label className="text-xs">{commission.channel === 'store' ? 'สาขา' : 'แพลตฟอร์ม'}</Label>
-                            <Select
-                              value={commission.branchOrPlatform}
-                              onValueChange={(value) => updateBranchCommission(index, 'branchOrPlatform', value)}
-                            >
-                              <SelectTrigger className="text-sm">
-                                <SelectValue placeholder={`เลือก${commission.channel === 'store' ? 'สาขา' : 'แพลตฟอร์ม'}`} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(() => {
-                                  const availableOptions = commission.channel === 'store'
-                                    ? (settings.branchesByChannel?.store || settings.branches || ['สาขาหลัก'])
-                                    : (settings.branchesByChannel?.online || ['Shopee', 'Lazada', 'Facebook']);
-                                  
-                                  return availableOptions.filter(branch => branch && branch.trim() !== '').map(branch => (
-                                    <SelectItem key={branch} value={branch}>
-                                      {branch}
-                                    </SelectItem>
-                                  ));
-                                })()}
-                              </SelectContent>
-                            </Select>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              ตัวเลือกสำหรับ{commission.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}: {
-                                (commission.channel === 'store'
-                                  ? (settings.branchesByChannel?.store || settings.branches || ['สาขาหลัก'])
-                                  : (settings.branchesByChannel?.online || ['Shopee', 'Lazada', 'Facebook'])
-                                ).filter(branch => branch && branch.trim() !== '').length
-                              } รายการ
+                            {/* Branch / Platform */}
+                            <div className="col-span-8 sm:col-span-6 space-y-1">
+                              <Label className="text-[11px] font-medium text-muted-foreground">
+                                {commission.channel === 'store' ? 'สาขา' : 'แพลตฟอร์ม'}
+                              </Label>
+                              <Select
+                                value={commission.branchOrPlatform || "__all__"}
+                                onValueChange={(value) => updateBranchCommission(index, 'branchOrPlatform', value === "__all__" ? "" : value)}
+                              >
+                                <SelectTrigger className="h-9 text-sm">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__all__">
+                                    <span className="inline-flex items-center gap-2 font-medium text-rose-600">
+                                      ⭐ ทุก{commission.channel === 'store' ? 'สาขา' : 'แพลตฟอร์ม'}
+                                    </span>
+                                  </SelectItem>
+                                  {validBranches.map((branch: string) => (
+                                    <SelectItem key={branch} value={branch}>{branch}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            {/* Rate */}
+                            <div className="col-span-3 sm:col-span-2 space-y-1">
+                              <Label className="text-[11px] font-medium text-muted-foreground">เรท (%)</Label>
+                              <div className="relative">
+                                <Input
+                                  type="number"
+                                  step="0.1"
+                                  min="0"
+                                  placeholder="0"
+                                  value={commission.commissionRate || ''}
+                                  onChange={(e) => updateBranchCommission(index, 'commissionRate', Number(e.target.value) || 0)}
+                                  className="h-9 text-sm pr-6"
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">%</span>
+                              </div>
+                            </div>
+
+                            {/* Delete */}
+                            <div className="col-span-1 flex justify-end">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeBranchCommission(index)}
+                                className="h-9 w-9 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </div>
-                        )}
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-              </div>
+              </section>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="phone">เบอร์โทรศัพท์</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              {/* SECTION 4 — ข้อมูลเพิ่มเติม */}
+              <section className="rounded-xl border bg-card p-4 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <MapPin className="h-4 w-4 text-cyan-500" />
+                  <h3 className="font-semibold text-sm">ข้อมูลเพิ่มเติม</h3>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="address">ที่อยู่</Label>
+                  <Textarea
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    rows={2}
+                    placeholder="ที่อยู่พนักงาน"
                   />
                 </div>
-                <div>
-                  <Label htmlFor="email">อีเมล</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                <div className="space-y-1.5">
+                  <Label htmlFor="note">หมายเหตุ</Label>
+                  <Textarea
+                    id="note"
+                    value={formData.note}
+                    onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                    rows={2}
+                    placeholder="ข้อมูลเพิ่มเติม / เงื่อนไขพิเศษ"
                   />
                 </div>
-              </div>
-
-              <div>
-                <Label htmlFor="address">ที่อยู่</Label>
-                <Textarea
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  rows={2}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="note">หมายเหตุ</Label>
-                <Textarea
-                  id="note"
-                  value={formData.note}
-                  onChange={(e) => setFormData({ ...formData, note: e.target.value })}
-                  rows={2}
-                />
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="active"
-                  checked={formData.isActive}
-                  onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
-                />
-                <Label htmlFor="active">พนักงานที่ยังทำงานอยู่</Label>
-              </div>
-
-              <div className="flex justify-end space-x-2">
-                <Button type="button" variant="outline" onClick={() => {
-                  setIsAddDialogOpen(false);
-                  setEditingEmployee(null);
-                  setFormData({
-                    name: "",
-                    position: "",
-                    salary: 0,
-                    homeBranch: "",
-                    secondaryBranches: [],
-                    branchCommissions: [],
-                    phone: "",
-                    email: "",
-                    address: "",
-                    note: "",
-                    isActive: true
-                  });
-                }}>
-                  ยกเลิก
-                </Button>
-                <Button type="submit" disabled={isAddingEmployee || isUpdatingEmployee}>
-                  {(isAddingEmployee || isUpdatingEmployee) ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      กำลังบันทึก...
-                    </>
-                  ) : (
-                    editingEmployee ? "บันทึกการแก้ไข" : "เพิ่มพนักงาน"
-                  )}
-                </Button>
-              </div>
+                <div className="flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-800 p-3">
+                  <div>
+                    <Label htmlFor="active" className="text-sm font-medium cursor-pointer">สถานะการทำงาน</Label>
+                    <p className="text-xs text-muted-foreground">ปิดเมื่อพนักงานลาออก</p>
+                  </div>
+                  <Switch
+                    id="active"
+                    checked={formData.isActive}
+                    onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
+                  />
+                </div>
+              </section>
             </form>
+
+            {/* Sticky footer */}
+            <div className="border-t bg-background px-6 py-4 flex items-center justify-end gap-2 rounded-b-lg">
+              <Button type="button" variant="outline" onClick={() => {
+                setIsAddDialogOpen(false);
+                setEditingEmployee(null);
+                setFormData({
+                  name: "",
+                  position: "",
+                  salary: 0,
+                  homeBranch: "",
+                  secondaryBranches: [],
+                  branchCommissions: [],
+                  phone: "",
+                  email: "",
+                  address: "",
+                  note: "",
+                  isActive: true
+                });
+              }}>
+                ยกเลิก
+              </Button>
+              <Button
+                onClick={(e) => handleSubmit(e as any)}
+                disabled={isAddingEmployee || isUpdatingEmployee}
+                className="bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 min-w-[140px]"
+              >
+                {(isAddingEmployee || isUpdatingEmployee) ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> กำลังบันทึก...</>
+                ) : (
+                  editingEmployee ? "บันทึกการแก้ไข" : "เพิ่มพนักงาน"
+                )}
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>

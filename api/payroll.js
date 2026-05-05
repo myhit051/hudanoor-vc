@@ -54,20 +54,24 @@ function rowToItem(row) {
   };
 }
 
-// Calculate commission breakdown for an employee given the income rows
+// Calculate commission breakdown for an employee given the income rows.
+// If commission.branchOrPlatform is empty → match ALL sales in that channel
+// (i.e. employee earns commission across every branch/platform of that channel).
 function calcEmployeeCommission(employee, incomes) {
   const breakdown = (employee.branchCommissions || []).map((commission) => {
+    const wantsAllInChannel = !commission.branchOrPlatform || commission.branchOrPlatform.trim() === '';
     const salesForBranch = incomes
-      .filter((income) =>
-        income.channel === commission.channel &&
-        income.branchOrPlatform === commission.branchOrPlatform
-      )
+      .filter((income) => {
+        if (income.channel !== commission.channel) return false;
+        if (wantsAllInChannel) return true;
+        return income.branchOrPlatform === commission.branchOrPlatform;
+      })
       .reduce((sum, income) => sum + income.totalAmount, 0);
     const rate = Number(commission.commissionRate) || 0;
     const commissionAmount = salesForBranch * (rate / 100);
     return {
       channel: commission.channel,
-      branchOrPlatform: commission.branchOrPlatform,
+      branchOrPlatform: commission.branchOrPlatform || '(ทุกสาขา)',
       sales: salesForBranch,
       rate,
       commission: commissionAmount,
@@ -135,11 +139,13 @@ export default async function handler(req, res) {
           let onlineCommission = 0;
 
           employee.branchCommissions.forEach((commission) => {
+            const wantsAllInChannel = !commission.branchOrPlatform || commission.branchOrPlatform.trim() === '';
             const salesForBranch = incomes
-              .filter((income) =>
-                income.channel === commission.channel &&
-                income.branchOrPlatform === commission.branchOrPlatform
-              )
+              .filter((income) => {
+                if (income.channel !== commission.channel) return false;
+                if (wantsAllInChannel) return true;
+                return income.branchOrPlatform === commission.branchOrPlatform;
+              })
               .reduce((sum, income) => sum + income.totalAmount, 0);
             const commissionAmount = salesForBranch * ((Number(commission.commissionRate) || 0) / 100);
             if (commission.channel === 'store') {
