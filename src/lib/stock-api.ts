@@ -15,6 +15,7 @@ export interface StockItem {
   date: string;
   sku: string;
   product_name: string;
+  product_category: string;
   color: string;
   size: string;
   quantity: number;
@@ -61,7 +62,7 @@ export async function deleteStockItem(id: string): Promise<void> {
   if (!res.ok) throw new Error('Failed to delete stock');
 }
 
-export type UpdateStockItem = Partial<Pick<StockItem, 'quantity' | 'cost_price' | 'sell_price' | 'note' | 'product_name' | 'date'>>;
+export type UpdateStockItem = Partial<Pick<StockItem, 'quantity' | 'cost_price' | 'sell_price' | 'note' | 'product_name' | 'product_category' | 'date'>>;
 
 export async function updateStockItem(id: string, data: UpdateStockItem): Promise<void> {
   const res = await fetch(`${API_BASE}/stock?id=${id}`, {

@@ -158,8 +158,10 @@ export default async function handler(req, res) {
           if (!date || total <= 0) skippedEmpty++;
           else validRows++;
         }
-        // Count both: dedicated legacy_sales table + any leftover rows in sales_orders from old import strategy
-        const prevLegacy = await db.execute(`SELECT COUNT(*) AS c FROM legacy_sales`);
+        // Count both: sheet-imported rows in legacy_sales + leftover rows in sales_orders from old import strategy
+        const prevLegacy = await db.execute(
+          `SELECT COUNT(*) AS c FROM legacy_sales WHERE import_source = 'sheet-import'`
+        );
         const prevOrders = await db.execute(
           `SELECT COUNT(*) AS c FROM sales_orders WHERE recorded_by = 'sheet-import'`
         );
@@ -336,9 +338,11 @@ export default async function handler(req, res) {
         let errors = 0;
         let skippedEmpty = 0;
 
-        // Step 1 — clean slate: wipe legacy_sales AND any leftover sheet-import rows
-        // in sales_orders (from earlier versions before this dedicated table existed)
-        const wipeLegacy = await db.execute(`DELETE FROM legacy_sales`);
+        // Step 1 — clean slate: wipe ONLY sheet-imported rows (preserve manual entries)
+        // Also wipe leftover sheet-import rows in sales_orders from earliest versions.
+        const wipeLegacy = await db.execute(
+          `DELETE FROM legacy_sales WHERE import_source = 'sheet-import'`
+        );
         const wipeOrders = await db.execute(
           `DELETE FROM sales_orders WHERE recorded_by = 'sheet-import'`
         );
@@ -346,9 +350,9 @@ export default async function handler(req, res) {
 
         // Step 2 — build INSERTs into legacy_sales using row index
         const insertSql = `INSERT INTO legacy_sales (
-          id, source_row, date, channel, branch_or_platform, product_name,
-          quantity, total_amount, note, imported_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+          id, source_row, date, channel, branch_or_platform, product_name, product_category,
+          quantity, total_amount, note, import_source, recorded_by, imported_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
         const inserts = [];
         dataRows.forEach((row, idx) => {
@@ -360,13 +364,15 @@ export default async function handler(req, res) {
           const channel = normalizeChannel(row[2]);
           const branch = String(row[3] || '').trim();
           const productName = String(row[4] || '').trim() || '(ไม่ระบุ)';
+          const productCategory = String(row[5] || '').trim();
           const qty = parseInt(row[6]) || 1;
           const origNote = String(row[8] || '').trim();
           inserts.push({
             rowNum,
             stmt: {
               sql: insertSql,
-              args: [importId, rowNum, date, channel, branch, productName, qty, total, origNote, now],
+              args: [importId, rowNum, date, channel, branch, productName, productCategory,
+                qty, total, origNote, 'sheet-import', 'sheet-import', now],
             },
           });
         });

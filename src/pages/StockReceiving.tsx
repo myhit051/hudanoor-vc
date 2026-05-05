@@ -29,6 +29,7 @@ const toLocalDateStr = (d: Date) => {
 interface SkuForm {
   sku: string;
   product_name: string;
+  product_category: string;
   cost_price: string;
   sell_price: string;
   note: string;
@@ -41,6 +42,7 @@ interface SkuForm {
 const emptyForm = (): SkuForm => ({
   sku: '',
   product_name: '',
+  product_category: '',
   cost_price: '',
   sell_price: '',
   note: '',
@@ -171,6 +173,7 @@ export function StockReceiving() {
           date: dateStr,
           sku: form.sku.trim(),
           product_name: form.product_name.trim(),
+          product_category: form.product_category.trim(),
           color,
           size,
           quantity: qty,
@@ -305,6 +308,18 @@ export function StockReceiving() {
                 placeholder="เช่น เดรสลายดอก"
               />
             </div>
+          </div>
+
+          {/* Row 1.5: หมวดหมู่สินค้า */}
+          <div>
+            <Label htmlFor="product_category">หมวดหมู่สินค้า</Label>
+            <Input
+              id="product_category"
+              className="mt-1"
+              value={form.product_category}
+              onChange={e => setForm(prev => ({ ...prev, product_category: e.target.value }))}
+              placeholder="เช่น เดรส, เสื้อ, กระโปรง (ถ้าไม่ระบุจะแสดงเป็น 'ไม่ระบุ')"
+            />
           </div>
 
           {/* Row 2: ราคา + copy */}

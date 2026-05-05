@@ -136,9 +136,13 @@ export function TaskReminder() {
             note: task.note ? `จาก Task Reminder: ${task.note}` : 'จาก Task Reminder',
           };
 
+          const token = localStorage.getItem('token');
           const response = await fetch('/api/expenses', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify(expenseData),
           });
 
@@ -149,12 +153,12 @@ export function TaskReminder() {
             description: "บันทึกรายจ่ายเรียบร้อยแล้ว",
           });
         } else {
-          // Create income record
+          // Create income record (writes to Turso legacy_sales as manual entry)
           const incomeData = {
+            action: 'manual-income',
             date: new Date().toISOString().split('T')[0],
             product_name: task.title,
             product_category: task.productCategory || 'อื่นๆ',
-            price: task.amount,
             quantity: 1,
             total_amount: task.amount,
             channel: task.channel || 'store',
@@ -162,10 +166,13 @@ export function TaskReminder() {
             note: task.note ? `จาก Task Reminder: ${task.note}` : 'จาก Task Reminder',
           };
 
-          // Assuming there's an income API endpoint
-          const response = await fetch('/api/income', {
+          const token = localStorage.getItem('token');
+          const response = await fetch('/api/sales?action=manual-income', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify(incomeData),
           });
 

@@ -117,6 +117,22 @@ export async function importLegacySales(): Promise<ImportResult> {
   return handleJson(res);
 }
 
+export async function previewLegacyExpensesImport(): Promise<ImportPreview> {
+  const res = await fetch(`${API_BASE}/expenses?action=import-expenses-preview`, {
+    headers: { ...authHeaders() },
+  });
+  return handleJson(res);
+}
+
+export async function importLegacyExpenses(): Promise<ImportResult> {
+  const res = await fetch(`${API_BASE}/expenses?action=import-expenses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({}),
+  });
+  return handleJson(res);
+}
+
 export async function deletePayrollRun(runId: string) {
   const res = await fetch(`${API_BASE}/payroll?runId=${encodeURIComponent(runId)}`, {
     method: 'DELETE',

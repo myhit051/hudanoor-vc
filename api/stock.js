@@ -89,7 +89,7 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const authUser = authenticate(req);
       const recordedBy = authUser ? authUser.name : '';
-      const { date, sku, product_name, color, size, quantity, cost_price, sell_price, note } = req.body;
+      const { date, sku, product_name, product_category, color, size, quantity, cost_price, sell_price, note } = req.body;
 
       if (!date || !sku || !product_name) {
         return res.status(400).json({ error: 'กรุณากรอก วันที่, SKU, และชื่อสินค้า' });
@@ -99,10 +99,10 @@ export default async function handler(req, res) {
       const now = new Date().toISOString();
 
       await db.execute({
-        sql: `INSERT INTO stock_in (id, date, sku, product_name, color, size, quantity, cost_price, sell_price, note, recorded_by, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO stock_in (id, date, sku, product_name, product_category, color, size, quantity, cost_price, sell_price, note, recorded_by, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
-          id, date, sku, product_name,
+          id, date, sku, product_name, product_category || '',
           color || '', size || '',
           Number(quantity) || 1,
           Number(cost_price) || 0,
@@ -119,7 +119,7 @@ export default async function handler(req, res) {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'Missing id' });
 
-      const { quantity, cost_price, sell_price, note, product_name, date } = req.body;
+      const { quantity, cost_price, sell_price, note, product_name, product_category, date } = req.body;
       const now = new Date().toISOString();
 
       // ตรวจสอบว่าปริมาณไม่ต่ำกว่าที่ขายไปแล้ว
@@ -141,6 +141,7 @@ export default async function handler(req, res) {
       if (sell_price !== undefined) { fields.push('sell_price = ?'); args.push(Number(sell_price)); }
       if (note !== undefined) { fields.push('note = ?'); args.push(note); }
       if (product_name !== undefined) { fields.push('product_name = ?'); args.push(product_name); }
+      if (product_category !== undefined) { fields.push('product_category = ?'); args.push(product_category); }
       if (date !== undefined) { fields.push('date = ?'); args.push(date); }
 
       if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });

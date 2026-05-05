@@ -17,6 +17,7 @@ export interface SalesOrder {
   branch_or_platform: string;
   sku: string;
   product_name: string;
+  product_category?: string;
   color: string;
   size: string;
   quantity: number;
@@ -31,6 +32,8 @@ export interface SalesOrder {
   order_id: string;
   recorded_by: string;
   created_at: string;
+  is_legacy?: number;
+  import_source?: string;
 }
 
 export interface OrderSummary {
@@ -43,6 +46,8 @@ export interface OrderSummary {
   total_items: number;
   total_quantity: number;
   total_amount: number;
+  is_legacy: boolean;
+  import_source?: string;
   items: SalesOrder[];
 }
 
@@ -50,13 +55,19 @@ export type NewSalesOrder = Omit<SalesOrder, 'id' | 'created_at' | 'discount_amo
 
 export async function getSalesOrders(params?: {
   date?: string;
+  date_from?: string;
+  date_to?: string;
   sku?: string;
   channel?: string;
+  include_legacy?: boolean;
 }): Promise<SalesOrder[]> {
   const query = new URLSearchParams();
   if (params?.date) query.set('date', params.date);
+  if (params?.date_from) query.set('date_from', params.date_from);
+  if (params?.date_to) query.set('date_to', params.date_to);
   if (params?.sku) query.set('sku', params.sku);
   if (params?.channel) query.set('channel', params.channel);
+  if (params?.include_legacy) query.set('include_legacy', 'true');
 
   const res = await fetch(`${API_BASE}/sales?${query}`, {
     headers: getAuthHeaders()
@@ -114,11 +125,11 @@ export async function deleteOrder(order_id: string): Promise<void> {
 
 export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
   const groups: Record<string, OrderSummary> = {};
-  
+
   sales.forEach(sale => {
     // If no order_id, we treat it as an individual order for display purposes
     const oId = sale.order_id || `legacy-${sale.id}`;
-    
+
     if (!groups[oId]) {
       groups[oId] = {
         order_id: sale.order_id,
@@ -130,10 +141,12 @@ export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
         total_items: 0,
         total_quantity: 0,
         total_amount: 0,
+        is_legacy: !!sale.is_legacy,
+        import_source: sale.import_source,
         items: []
       };
     }
-    
+
     groups[oId].items.push(sale);
     groups[oId].total_items += 1;
     groups[oId].total_quantity += Number(sale.quantity);

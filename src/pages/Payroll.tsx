@@ -23,6 +23,7 @@ import { PayslipDialog } from "@/components/payroll/PayslipDialog";
 import { PayrollItem } from "@/types/payroll";
 import {
   ImportPreview, ImportResult, importLegacySales, previewLegacySalesImport,
+  importLegacyExpenses, previewLegacyExpensesImport,
 } from "@/lib/vercel-payroll";
 import { toast } from "@/hooks/use-toast";
 
@@ -61,6 +62,7 @@ export default function Payroll() {
   const [adjustNote, setAdjustNote] = useState("");
 
   const [importOpen, setImportOpen] = useState(false);
+  const [importMode, setImportMode] = useState<'sales' | 'expenses'>('sales');
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -127,13 +129,16 @@ export default function Payroll() {
     setPayslipOpen(true);
   };
 
-  const openImportDialog = async () => {
+  const openImportDialog = async (mode: 'sales' | 'expenses' = 'sales') => {
+    setImportMode(mode);
     setImportOpen(true);
     setImportPreview(null);
     setImportResult(null);
     setImportLoading(true);
     try {
-      const preview = await previewLegacySalesImport();
+      const preview = mode === 'sales'
+        ? await previewLegacySalesImport()
+        : await previewLegacyExpensesImport();
       setImportPreview(preview);
     } catch (err: any) {
       toast({ title: "ดึงข้อมูล Sheet ไม่สำเร็จ", description: err.message || "", variant: "destructive" });
@@ -146,11 +151,13 @@ export default function Payroll() {
   const runImport = async () => {
     setImportLoading(true);
     try {
-      const result = await importLegacySales();
+      const result = importMode === 'sales'
+        ? await importLegacySales()
+        : await importLegacyExpenses();
       setImportResult(result);
       toast({
-        title: "นำเข้ายอดขายเสร็จสิ้น",
-        description: `เพิ่มใหม่ ${result.imported} · ข้าม ${result.skipped} · ผิดพลาด ${result.errors}`,
+        title: importMode === 'sales' ? "นำเข้ายอดขายเสร็จสิ้น" : "นำเข้ารายจ่ายเสร็จสิ้น",
+        description: `เพิ่มใหม่ ${result.imported} · ผิดพลาด ${result.errors}`,
       });
       // Refresh current period (commission may change)
       await refetch();
@@ -194,9 +201,13 @@ export default function Payroll() {
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
             {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           </Button>
-          <Button variant="outline" size="sm" onClick={openImportDialog} title="นำเข้ายอดขายเก่าจาก Google Sheet">
+          <Button variant="outline" size="sm" onClick={() => openImportDialog('sales')} title="นำเข้ายอดขายเก่าจาก Google Sheet">
             <DownloadCloud className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">นำเข้ายอดขายเก่า</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => openImportDialog('expenses')} title="นำเข้ารายจ่ายเก่าจาก Google Sheet">
+            <DownloadCloud className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">นำเข้ารายจ่ายเก่า</span>
           </Button>
         </div>
       </div>
@@ -476,16 +487,20 @@ export default function Payroll() {
         run={run}
       />
 
-      {/* Import legacy sales Dialog */}
+      {/* Import legacy sales / expenses Dialog */}
       <Dialog open={importOpen} onOpenChange={(o) => { if (!importLoading) setImportOpen(o); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DownloadCloud className="h-5 w-5 text-rose-500" />
-              นำเข้ายอดขายเก่าจาก Google Sheet
+              {importMode === 'sales'
+                ? 'นำเข้ายอดขายเก่าจาก Google Sheet'
+                : 'นำเข้ารายจ่ายเก่าจาก Google Sheet'}
             </DialogTitle>
             <DialogDescription>
-              ดึงข้อมูลยอดขายเก่าจาก Sheet "รายรับ" เข้าฐานข้อมูลใหม่ — เพื่อใช้คำนวณค่าคอมย้อนหลัง
+              {importMode === 'sales'
+                ? 'ดึงข้อมูลยอดขายเก่าจาก Sheet "รายรับ" เข้าฐานข้อมูลใหม่ — เพื่อใช้คำนวณค่าคอมย้อนหลังและแสดงใน Dashboard'
+                : 'ดึงข้อมูลรายจ่ายเก่าจาก Sheet "รายจ่าย" เข้าฐานข้อมูลใหม่ — เพื่อใช้แสดงใน Dashboard'}
             </DialogDescription>
           </DialogHeader>
 

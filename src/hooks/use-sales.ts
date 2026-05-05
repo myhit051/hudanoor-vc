@@ -2,7 +2,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getSalesOrders, addSalesOrder, addSalesOrders, deleteSalesOrder, deleteOrder, NewSalesOrder } from '@/lib/sales-api';
 import { toast } from '@/hooks/use-toast';
 
-export function useSales(params?: { date?: string; sku?: string; channel?: string }) {
+export function useSales(params?: {
+  date?: string;
+  date_from?: string;
+  date_to?: string;
+  sku?: string;
+  channel?: string;
+  include_legacy?: boolean;
+}) {
   const queryClient = useQueryClient();
 
   const { data: salesOrders = [], isLoading, refetch } = useQuery({

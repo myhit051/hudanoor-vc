@@ -72,16 +72,15 @@ export function OrderHistory() {
     }
   };
 
-  const { salesOrders, isLoading, deleteSale, deleteOrder, isDeleting, isDeletingOrder } = useSales();
+  const { salesOrders, isLoading, deleteSale, deleteOrder, isDeleting, isDeletingOrder } = useSales({
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+    include_legacy: true,
+  });
 
-  // Filter sales based on date and search query
+  // Filter sales based on search query (date filter is server-side)
   const filteredSales = useMemo(() => {
     return salesOrders.filter(sale => {
-      // Date filter
-      if (dateFrom && sale.date < dateFrom) return false;
-      if (dateTo && sale.date > dateTo) return false;
-      
-      // Search query (sku, product name, order id, note)
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return (
@@ -94,7 +93,7 @@ export function OrderHistory() {
       }
       return true;
     });
-  }, [salesOrders, dateFrom, dateTo, searchQuery]);
+  }, [salesOrders, searchQuery]);
 
   const groupedOrders = useMemo(() => groupSalesByOrder(filteredSales), [filteredSales]);
 
@@ -272,7 +271,9 @@ export function OrderHistory() {
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold truncate">{group.order_id || '-'}</span>
+                            <span className="text-sm font-semibold truncate">
+                              {group.order_id || (group.is_legacy ? `LEGACY-${group.items[0]?.id?.replace(/^legacy_row_/, '')}` : '-')}
+                            </span>
                             <Badge
                               variant="outline"
                               className={cn(
@@ -284,6 +285,14 @@ export function OrderHistory() {
                             >
                               {group.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}
                             </Badge>
+                            {group.is_legacy && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] px-1.5 py-0 shrink-0 bg-amber-50 text-amber-700 border-amber-200"
+                              >
+                                {group.import_source === 'manual' ? 'บันทึกย้อนหลัง' : 'นำเข้าจาก Sheet'}
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             <span className="text-xs text-muted-foreground">{group.branch_or_platform}</span>
@@ -343,20 +352,25 @@ export function OrderHistory() {
                         </span>
                       </div>
                       
-                      {(user?.role === 'admin' || user?.name === group.recorded_by) && (
-                        <div className="px-4 py-3 bg-muted/20 border-t border-muted/60 flex justify-end">
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            className="text-xs"
-                            disabled={isDeleting || isDeletingOrder}
-                            onClick={() => handleDeleteOrder(group.order_id || group.items[0].id, !group.order_id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                            ลบออเดอร์
-                          </Button>
-                        </div>
-                      )}
+                      {(() => {
+                        const isSheetImport = group.is_legacy && group.import_source === 'sheet-import';
+                        const canDelete = !isSheetImport && (user?.role === 'admin' || user?.name === group.recorded_by);
+                        if (!canDelete) return null;
+                        return (
+                          <div className="px-4 py-3 bg-muted/20 border-t border-muted/60 flex justify-end">
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="text-xs"
+                              disabled={isDeleting || isDeletingOrder}
+                              onClick={() => handleDeleteOrder(group.order_id || group.items[0].id, !group.order_id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                              ลบออเดอร์
+                            </Button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </AccordionContent>
                 </AccordionItem>
