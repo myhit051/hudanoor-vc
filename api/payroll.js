@@ -321,7 +321,7 @@ export default async function handler(req, res) {
 
       // Import legacy sales from Google Sheets `รายรับ` into Turso `sales_orders`
       // Idempotent: ID = legacy_<sheet_id>; existing rows are skipped.
-      // Optimized: bulk-fetch existing IDs + batch inserts to fit serverless timeout.
+      // Optimized: dedupe + INSERT OR IGNORE + batch + per-row fallback on failure.
       if (req.query.action === 'import-sales' || req.body?.action === 'import-sales') {
         const rows = await readLegacyIncomeSheet();
         const dataRows = rows.slice(1).filter((r) => r[0] && String(r[0]).trim() !== '');
@@ -329,8 +329,20 @@ export default async function handler(req, res) {
         const errorSamples = [];
         let errors = 0;
 
-        // Step 1 — bulk check which IDs already exist (chunked to avoid huge IN clauses)
-        const allIds = dataRows.map((r) => `legacy_${String(r[0]).trim()}`);
+        // Step 1 — dedupe sheet rows by ID (keep first occurrence)
+        const seen = new Set();
+        const dedupedRows = [];
+        let duplicatesInSheet = 0;
+        for (const row of dataRows) {
+          const sheetId = String(row[0]).trim();
+          const importId = `legacy_${sheetId}`;
+          if (seen.has(importId)) { duplicatesInSheet++; continue; }
+          seen.add(importId);
+          dedupedRows.push(row);
+        }
+
+        // Step 2 — bulk check which IDs already exist
+        const allIds = dedupedRows.map((r) => `legacy_${String(r[0]).trim()}`);
         const existing = new Set();
         const checkChunkSize = 200;
         for (let i = 0; i < allIds.length; i += checkChunkSize) {
@@ -342,58 +354,63 @@ export default async function handler(req, res) {
           });
           for (const row of r.rows) existing.add(row.id);
         }
-
         const skipped = existing.size;
 
-        // Step 2 — build INSERT batch for new rows only
+        // Step 3 — build INSERT OR IGNORE batch for new rows only
+        const insertSql = `INSERT OR IGNORE INTO sales_orders (
+          id, date, channel, branch_or_platform, sku, product_name, color, size,
+          quantity, unit_price, discount_type, discount_value, discount_amount,
+          final_unit_price, total_amount, note, stock_in_id, created_at, recorded_by, order_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
         const inserts = [];
-        for (const row of dataRows) {
+        for (const row of dedupedRows) {
           const sheetId = String(row[0]).trim();
           const importId = `legacy_${sheetId}`;
           if (existing.has(importId)) continue;
-
-          try {
-            const date = String(row[1] || '').trim() || now.split('T')[0];
-            const channel = normalizeChannel(row[2]);
-            const branch = String(row[3] || '').trim();
-            const productName = String(row[4] || '').trim() || '(ไม่ระบุ)';
-            const qty = parseInt(row[6]) || 1;
-            const total = parseFloat(row[7]) || 0;
-            const unitPrice = qty > 0 ? total / qty : 0;
-            const origNote = String(row[8] || '').trim();
-            const noteCombined = origNote ? `นำเข้าจาก Sheet | ${origNote}` : 'นำเข้าจาก Sheet';
-            const createdAt = String(row[9] || '').trim() || now;
-
-            inserts.push({
-              sql: `INSERT INTO sales_orders (
-                id, date, channel, branch_or_platform, sku, product_name, color, size,
-                quantity, unit_price, discount_type, discount_value, discount_amount,
-                final_unit_price, total_amount, note, stock_in_id, created_at, recorded_by, order_id
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          const date = String(row[1] || '').trim() || now.split('T')[0];
+          const channel = normalizeChannel(row[2]);
+          const branch = String(row[3] || '').trim();
+          const productName = String(row[4] || '').trim() || '(ไม่ระบุ)';
+          const qty = parseInt(row[6]) || 1;
+          const total = parseFloat(row[7]) || 0;
+          const unitPrice = qty > 0 ? total / qty : 0;
+          const origNote = String(row[8] || '').trim();
+          const noteCombined = origNote ? `นำเข้าจาก Sheet | ${origNote}` : 'นำเข้าจาก Sheet';
+          const createdAt = String(row[9] || '').trim() || now;
+          inserts.push({
+            sheetId,
+            stmt: {
+              sql: insertSql,
               args: [
                 importId, date, channel, branch, 'LEGACY', productName, '', '',
                 qty, unitPrice, 'amount', 0, 0,
                 unitPrice, total, noteCombined, null, createdAt, 'sheet-import', `LEGACY-${sheetId}`,
               ],
-            });
-          } catch (e) {
-            errors++;
-            if (errorSamples.length < 5) errorSamples.push({ sheetId, message: e.message });
-          }
+            },
+          });
         }
 
-        // Step 3 — execute batches (parallel chunks for speed)
+        // Step 4 — try batch first; on failure fall back to per-row to find bad rows
         let imported = 0;
         const batchSize = 50;
         for (let i = 0; i < inserts.length; i += batchSize) {
           const batch = inserts.slice(i, i + batchSize);
           try {
-            await db.batch(batch, 'write');
+            await db.batch(batch.map((b) => b.stmt), 'write');
             imported += batch.length;
-          } catch (e) {
-            errors += batch.length;
-            if (errorSamples.length < 5) {
-              errorSamples.push({ sheetId: `batch ${i}-${i + batch.length}`, message: e.message });
+          } catch (batchErr) {
+            // Fallback: insert one by one to isolate failures
+            for (const it of batch) {
+              try {
+                await db.execute(it.stmt);
+                imported++;
+              } catch (rowErr) {
+                errors++;
+                if (errorSamples.length < 5) {
+                  errorSamples.push({ sheetId: it.sheetId, message: rowErr.message });
+                }
+              }
             }
           }
         }
@@ -401,6 +418,7 @@ export default async function handler(req, res) {
         return res.status(200).json({
           success: true,
           totalInSheet: dataRows.length,
+          duplicatesInSheet,
           imported,
           skipped,
           errors,

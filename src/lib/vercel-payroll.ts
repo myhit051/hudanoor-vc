@@ -91,6 +91,7 @@ export interface ImportPreview {
 export interface ImportResult {
   success: boolean;
   totalInSheet: number;
+  duplicatesInSheet?: number;
   imported: number;
   skipped: number;
   errors: number;

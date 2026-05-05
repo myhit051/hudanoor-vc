@@ -501,15 +501,21 @@ export default function Payroll() {
                   <CheckCircle2 className="h-5 w-5" />
                   <span className="font-semibold">นำเข้าเสร็จสิ้น</span>
                 </div>
-                <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                   <div>
                     <div className="text-2xl font-bold text-emerald-700">{importResult.imported}</div>
                     <div className="text-xs text-emerald-600">เพิ่มใหม่</div>
                   </div>
                   <div>
                     <div className="text-2xl font-bold text-gray-500">{importResult.skipped}</div>
-                    <div className="text-xs text-gray-500">ข้าม (ซ้ำ)</div>
+                    <div className="text-xs text-gray-500">ข้าม (ซ้ำใน DB)</div>
                   </div>
+                  {importResult.duplicatesInSheet !== undefined && (
+                    <div>
+                      <div className="text-2xl font-bold text-amber-600">{importResult.duplicatesInSheet}</div>
+                      <div className="text-xs text-amber-600">ซ้ำใน Sheet</div>
+                    </div>
+                  )}
                   <div>
                     <div className="text-2xl font-bold text-red-500">{importResult.errors}</div>
                     <div className="text-xs text-red-500">ผิดพลาด</div>
