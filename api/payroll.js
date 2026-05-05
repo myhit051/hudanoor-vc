@@ -142,29 +142,29 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { period, runId, action } = req.query;
 
-      // Preview legacy sales import — count what will be imported vs skipped
+      // Preview legacy sales import — show counts based on row position
+      // (we ignore the ID column because it has duplicates / blanks)
       if (action === 'import-sales-preview') {
         const rows = await readLegacyIncomeSheet();
-        const dataRows = rows.slice(1).filter((r) => r[0] && String(r[0]).trim() !== '');
-        const ids = dataRows.map((r) => `legacy_${r[0]}`);
-        let alreadyImported = 0;
-        if (ids.length > 0) {
-          // Chunked check (limit args per query)
-          const chunkSize = 100;
-          for (let i = 0; i < ids.length; i += chunkSize) {
-            const chunk = ids.slice(i, i + chunkSize);
-            const placeholders = chunk.map(() => '?').join(',');
-            const r = await db.execute({
-              sql: `SELECT COUNT(*) AS c FROM sales_orders WHERE id IN (${placeholders})`,
-              args: chunk,
-            });
-            alreadyImported += Number(r.rows[0]?.c) || 0;
-          }
+        const dataRows = rows.slice(1);
+        let validRows = 0;
+        let skippedEmpty = 0;
+        for (const row of dataRows) {
+          const total = parseFloat(row[7]) || 0;
+          const date = String(row[1] || '').trim();
+          if (!date || total <= 0) skippedEmpty++;
+          else validRows++;
         }
+        const prevResult = await db.execute(
+          `SELECT COUNT(*) AS c FROM sales_orders WHERE recorded_by = 'sheet-import'`
+        );
+        const previousImports = Number(prevResult.rows[0]?.c) || 0;
         return res.status(200).json({
           totalInSheet: dataRows.length,
-          alreadyImported,
-          willImport: dataRows.length - alreadyImported,
+          validRows,
+          skippedEmpty,
+          previousImports,
+          willImport: validRows,
         });
       }
 
@@ -319,79 +319,63 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'Admin access required' });
       }
 
-      // Import legacy sales from Google Sheets `รายรับ` into Turso `sales_orders`
-      // Idempotent: ID = legacy_<sheet_id>; existing rows are skipped.
-      // Optimized: dedupe + INSERT OR IGNORE + batch + per-row fallback on failure.
+      // Import legacy sales from Google Sheets `รายรับ` into Turso `sales_orders`.
+      // Strategy: ignore the messy ID column — derive the ID from the row position
+      // (legacy_row_<n>). Always wipe previous imports and re-insert so the DB
+      // stays in sync with the current sheet content.
       if (req.query.action === 'import-sales' || req.body?.action === 'import-sales') {
         const rows = await readLegacyIncomeSheet();
-        const dataRows = rows.slice(1).filter((r) => r[0] && String(r[0]).trim() !== '');
+        const dataRows = rows.slice(1);
         const now = new Date().toISOString();
         const errorSamples = [];
         let errors = 0;
+        let skippedEmpty = 0;
 
-        // Step 1 — dedupe sheet rows by ID (keep first occurrence)
-        const seen = new Set();
-        const dedupedRows = [];
-        let duplicatesInSheet = 0;
-        for (const row of dataRows) {
-          const sheetId = String(row[0]).trim();
-          const importId = `legacy_${sheetId}`;
-          if (seen.has(importId)) { duplicatesInSheet++; continue; }
-          seen.add(importId);
-          dedupedRows.push(row);
-        }
+        // Step 1 — wipe previous imports so we can re-insert cleanly
+        const wipeResult = await db.execute(
+          `DELETE FROM sales_orders WHERE recorded_by = 'sheet-import'`
+        );
+        const wipedCount = Number(wipeResult.rowsAffected) || 0;
 
-        // Step 2 — bulk check which IDs already exist
-        const allIds = dedupedRows.map((r) => `legacy_${String(r[0]).trim()}`);
-        const existing = new Set();
-        const checkChunkSize = 200;
-        for (let i = 0; i < allIds.length; i += checkChunkSize) {
-          const chunk = allIds.slice(i, i + checkChunkSize);
-          const placeholders = chunk.map(() => '?').join(',');
-          const r = await db.execute({
-            sql: `SELECT id FROM sales_orders WHERE id IN (${placeholders})`,
-            args: chunk,
-          });
-          for (const row of r.rows) existing.add(row.id);
-        }
-        const skipped = existing.size;
-
-        // Step 3 — build INSERT OR IGNORE batch for new rows only
-        const insertSql = `INSERT OR IGNORE INTO sales_orders (
+        // Step 2 — build INSERT batch using row index as deterministic ID
+        const insertSql = `INSERT INTO sales_orders (
           id, date, channel, branch_or_platform, sku, product_name, color, size,
           quantity, unit_price, discount_type, discount_value, discount_amount,
           final_unit_price, total_amount, note, stock_in_id, created_at, recorded_by, order_id
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
         const inserts = [];
-        for (const row of dedupedRows) {
-          const sheetId = String(row[0]).trim();
-          const importId = `legacy_${sheetId}`;
-          if (existing.has(importId)) continue;
-          const date = String(row[1] || '').trim() || now.split('T')[0];
+        dataRows.forEach((row, idx) => {
+          const date = String(row[1] || '').trim();
+          const total = parseFloat(row[7]) || 0;
+          // Skip rows with no date or zero total — they don't affect commission
+          if (!date || total <= 0) { skippedEmpty++; return; }
+          const rowNum = idx + 2; // sheet row number (1-based, +1 for header)
+          const importId = `legacy_row_${rowNum}`;
           const channel = normalizeChannel(row[2]);
           const branch = String(row[3] || '').trim();
           const productName = String(row[4] || '').trim() || '(ไม่ระบุ)';
           const qty = parseInt(row[6]) || 1;
-          const total = parseFloat(row[7]) || 0;
           const unitPrice = qty > 0 ? total / qty : 0;
           const origNote = String(row[8] || '').trim();
-          const noteCombined = origNote ? `นำเข้าจาก Sheet | ${origNote}` : 'นำเข้าจาก Sheet';
+          const noteCombined = origNote
+            ? `นำเข้าจาก Sheet (row ${rowNum}) | ${origNote}`
+            : `นำเข้าจาก Sheet (row ${rowNum})`;
           const createdAt = String(row[9] || '').trim() || now;
           inserts.push({
-            sheetId,
+            rowNum,
             stmt: {
               sql: insertSql,
               args: [
                 importId, date, channel, branch, 'LEGACY', productName, '', '',
                 qty, unitPrice, 'amount', 0, 0,
-                unitPrice, total, noteCombined, null, createdAt, 'sheet-import', `LEGACY-${sheetId}`,
+                unitPrice, total, noteCombined, null, createdAt, 'sheet-import', `LEGACY-ROW-${rowNum}`,
               ],
             },
           });
-        }
+        });
 
-        // Step 4 — try batch first; on failure fall back to per-row to find bad rows
+        // Step 3 — execute in batches; per-row fallback on batch failure
         let imported = 0;
         const batchSize = 50;
         for (let i = 0; i < inserts.length; i += batchSize) {
@@ -400,7 +384,6 @@ export default async function handler(req, res) {
             await db.batch(batch.map((b) => b.stmt), 'write');
             imported += batch.length;
           } catch (batchErr) {
-            // Fallback: insert one by one to isolate failures
             for (const it of batch) {
               try {
                 await db.execute(it.stmt);
@@ -408,7 +391,7 @@ export default async function handler(req, res) {
               } catch (rowErr) {
                 errors++;
                 if (errorSamples.length < 5) {
-                  errorSamples.push({ sheetId: it.sheetId, message: rowErr.message });
+                  errorSamples.push({ sheetId: `row ${it.rowNum}`, message: rowErr.message });
                 }
               }
             }
@@ -418,9 +401,10 @@ export default async function handler(req, res) {
         return res.status(200).json({
           success: true,
           totalInSheet: dataRows.length,
-          duplicatesInSheet,
+          wipedPrevious: wipedCount,
+          skippedEmpty,
           imported,
-          skipped,
+          skipped: 0, // not applicable in re-import strategy
           errors,
           errorSamples,
         });

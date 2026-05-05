@@ -84,14 +84,17 @@ export async function reopenPayrollRun(runId: string) {
 
 export interface ImportPreview {
   totalInSheet: number;
-  alreadyImported: number;
+  validRows: number;
+  skippedEmpty: number;
+  previousImports: number;
   willImport: number;
 }
 
 export interface ImportResult {
   success: boolean;
   totalInSheet: number;
-  duplicatesInSheet?: number;
+  wipedPrevious?: number;
+  skippedEmpty?: number;
   imported: number;
   skipped: number;
   errors: number;

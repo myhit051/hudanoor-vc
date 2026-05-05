@@ -506,14 +506,16 @@ export default function Payroll() {
                     <div className="text-2xl font-bold text-emerald-700">{importResult.imported}</div>
                     <div className="text-xs text-emerald-600">เพิ่มใหม่</div>
                   </div>
-                  <div>
-                    <div className="text-2xl font-bold text-gray-500">{importResult.skipped}</div>
-                    <div className="text-xs text-gray-500">ข้าม (ซ้ำใน DB)</div>
-                  </div>
-                  {importResult.duplicatesInSheet !== undefined && (
+                  {importResult.wipedPrevious !== undefined && importResult.wipedPrevious > 0 && (
                     <div>
-                      <div className="text-2xl font-bold text-amber-600">{importResult.duplicatesInSheet}</div>
-                      <div className="text-xs text-amber-600">ซ้ำใน Sheet</div>
+                      <div className="text-2xl font-bold text-gray-500">{importResult.wipedPrevious}</div>
+                      <div className="text-xs text-gray-500">เคลียร์ของเก่า</div>
+                    </div>
+                  )}
+                  {importResult.skippedEmpty !== undefined && importResult.skippedEmpty > 0 && (
+                    <div>
+                      <div className="text-2xl font-bold text-amber-600">{importResult.skippedEmpty}</div>
+                      <div className="text-xs text-amber-600">ข้าม (ว่าง/0)</div>
                     </div>
                   )}
                   <div>
@@ -539,26 +541,29 @@ export default function Payroll() {
               <div className="rounded-lg border bg-card p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">พบใน Sheet ทั้งหมด</span>
-                  <span className="font-semibold">{importPreview.totalInSheet} รายการ</span>
+                  <span className="font-semibold">{importPreview.totalInSheet} แถว</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">นำเข้าแล้วก่อนหน้า</span>
-                  <span className="font-semibold text-gray-500">{importPreview.alreadyImported} รายการ</span>
+                  <span className="text-muted-foreground">แถวว่าง / total = 0 (ข้าม)</span>
+                  <span className="font-semibold text-amber-600">{importPreview.skippedEmpty}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">เคยนำเข้าก่อนหน้า (จะถูกแทนที่)</span>
+                  <span className="font-semibold text-gray-500">{importPreview.previousImports}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2">
-                  <span className="font-medium">จะเพิ่มใหม่</span>
+                  <span className="font-medium">จะนำเข้า</span>
                   <span className="font-bold text-rose-600 text-lg">{importPreview.willImport} รายการ</span>
                 </div>
               </div>
-              {importPreview.willImport === 0 ? (
-                <div className="text-center text-sm text-muted-foreground bg-gray-50 rounded p-3">
-                  ✓ ข้อมูลทั้งหมดถูกนำเข้าแล้ว ไม่มีอะไรต้องเพิ่ม
-                </div>
-              ) : (
+              {importPreview.previousImports > 0 && (
                 <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2.5">
-                  ⚠️ ยอดขายที่นำเข้าจะใช้ <code className="bg-white px-1 rounded">SKU = LEGACY</code> และ note ระบุว่ามาจาก Sheet — ปลอดภัยที่จะรันซ้ำ (ของซ้ำจะถูกข้าม)
+                  ⚠️ <strong>เคลียร์แล้วโหลดใหม่:</strong> ยอดขายเก่าที่เคยนำเข้าจาก Sheet ({importPreview.previousImports} รายการ) จะถูกลบทิ้งและใส่ใหม่ทั้งหมด — เพื่อให้ตรงกับ Sheet ปัจจุบัน
                 </div>
               )}
+              <div className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded p-2.5">
+                💡 ใช้ <strong>row position</strong> ของ Sheet เป็น ID (เพราะ ID column ใน Sheet มีปัญหาซ้ำ) · ยอดขายจริงที่บันทึกผ่าน "บันทึกยอดขาย" ไม่ถูกแตะ
+              </div>
             </div>
           ) : null}
 
@@ -568,7 +573,10 @@ export default function Payroll() {
             </Button>
             {importPreview && !importResult && importPreview.willImport > 0 && (
               <Button onClick={runImport} disabled={importLoading} className="bg-gradient-to-r from-rose-500 to-pink-500">
-                {importLoading ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> กำลังนำเข้า...</> : <><DownloadCloud className="h-4 w-4 mr-2" /> นำเข้าตอนนี้</>}
+                {importLoading
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> กำลังนำเข้า...</>
+                  : <><DownloadCloud className="h-4 w-4 mr-2" /> {importPreview.previousImports > 0 ? "เคลียร์ + นำเข้าใหม่" : "นำเข้าตอนนี้"}</>
+                }
               </Button>
             )}
           </DialogFooter>
