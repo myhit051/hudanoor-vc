@@ -113,7 +113,45 @@ export async function getStockInventory(): Promise<StockInventoryItem[]> {
   return data.data as StockInventoryItem[];
 }
 
+// บีบอัดรูปฝั่ง browser ด้วย Canvas ก่อนอัพโหลด — ลด payload ทั้งฝั่งเครือข่ายและพื้นที่เก็บ
+async function compressImage(file: File, maxDim = 1600, quality = 0.85): Promise<File> {
+  // ข้ามไฟล์ที่เล็กอยู่แล้ว, ที่ไม่ใช่รูป, หรือฟอร์แมตที่ห้ามแปลง (gif=เสียอนิเมชั่น, svg=vector)
+  if (file.size < 150 * 1024) return file;
+  if (!file.type.startsWith('image/') || file.type === 'image/gif' || file.type === 'image/svg+xml') {
+    return file;
+  }
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    let { width, height } = bitmap;
+    if (width > maxDim || height > maxDim) {
+      const scale = Math.min(maxDim / width, maxDim / height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { bitmap.close(); return file; }
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    const blob = await new Promise<Blob | null>(resolve =>
+      canvas.toBlob(resolve, 'image/jpeg', quality)
+    );
+    if (!blob || blob.size >= file.size) return file;
+
+    const newName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+    return new File([blob], newName, { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
 export async function uploadProductImage(file: File, sku: string): Promise<string> {
+  const compressed = await compressImage(file);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = async () => {
@@ -122,7 +160,7 @@ export async function uploadProductImage(file: File, sku: string): Promise<strin
         const res = await fetch(`${API_BASE}/upload`, {
           method: 'POST',
           headers: getAuthHeaders(),
-          body: JSON.stringify({ base64, filename: file.name, mimeType: file.type, sku })
+          body: JSON.stringify({ base64, filename: compressed.name, mimeType: compressed.type, sku })
         });
         if (!res.ok) {
           const err = await res.json();
@@ -135,6 +173,6 @@ export async function uploadProductImage(file: File, sku: string): Promise<strin
       }
     };
     reader.onerror = reject;
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(compressed);
   });
 }
