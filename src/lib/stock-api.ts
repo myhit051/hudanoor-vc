@@ -22,6 +22,7 @@ export interface StockItem {
   cost_price: number;
   sell_price: number;
   note: string;
+  image_url: string;
   recorded_by: string;
   created_at: string;
   updated_at: string;
@@ -62,7 +63,7 @@ export async function deleteStockItem(id: string): Promise<void> {
   if (!res.ok) throw new Error('Failed to delete stock');
 }
 
-export type UpdateStockItem = Partial<Pick<StockItem, 'quantity' | 'cost_price' | 'sell_price' | 'note' | 'product_name' | 'product_category' | 'date'>>;
+export type UpdateStockItem = Partial<Pick<StockItem, 'quantity' | 'cost_price' | 'sell_price' | 'note' | 'product_name' | 'product_category' | 'date' | 'image_url'>>;
 
 export async function updateStockItem(id: string, data: UpdateStockItem): Promise<void> {
   const res = await fetch(`${API_BASE}/stock?id=${id}`, {
@@ -91,6 +92,7 @@ export interface StockInventoryItem {
   avg_cost_price: number;
   avg_sell_price: number;
   stock_value: number;
+  image_url?: string;
 }
 
 export async function getAvailableStock(): Promise<AvailableStockItem[]> {
@@ -109,4 +111,30 @@ export async function getStockInventory(): Promise<StockInventoryItem[]> {
   if (!res.ok) throw new Error('Failed to fetch stock inventory');
   const data = await res.json();
   return data.data as StockInventoryItem[];
+}
+
+export async function uploadProductImage(file: File, sku: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const base64 = (reader.result as string).split(',')[1];
+        const res = await fetch(`${API_BASE}/upload`, {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ base64, filename: file.name, mimeType: file.type, sku })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Upload failed');
+        }
+        const data = await res.json();
+        resolve(data.url);
+      } catch (e) {
+        reject(e);
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }

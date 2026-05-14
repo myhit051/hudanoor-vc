@@ -30,7 +30,8 @@ export default async function handler(req, res) {
               COALESCE(SUM(s.quantity), 0) - COALESCE(SUM(so.qty_sold), 0) AS remaining,
               COALESCE(AVG(s.cost_price), 0) AS avg_cost_price,
               COALESCE(AVG(s.sell_price), 0) AS avg_sell_price,
-              (COALESCE(SUM(s.quantity), 0) - COALESCE(SUM(so.qty_sold), 0)) * COALESCE(AVG(s.cost_price), 0) AS stock_value
+              (COALESCE(SUM(s.quantity), 0) - COALESCE(SUM(so.qty_sold), 0)) * COALESCE(AVG(s.cost_price), 0) AS stock_value,
+              MAX(CASE WHEN s.image_url != '' THEN s.image_url END) AS image_url
             FROM stock_in s
             LEFT JOIN (
               SELECT sku, color, size, SUM(quantity) AS qty_sold
@@ -89,7 +90,7 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const authUser = authenticate(req);
       const recordedBy = authUser ? authUser.name : '';
-      const { date, sku, product_name, product_category, color, size, quantity, cost_price, sell_price, note } = req.body;
+      const { date, sku, product_name, product_category, color, size, quantity, cost_price, sell_price, note, image_url } = req.body;
 
       if (!date || !sku || !product_name) {
         return res.status(400).json({ error: 'กรุณากรอก วันที่, SKU, และชื่อสินค้า' });
@@ -99,15 +100,15 @@ export default async function handler(req, res) {
       const now = new Date().toISOString();
 
       await db.execute({
-        sql: `INSERT INTO stock_in (id, date, sku, product_name, product_category, color, size, quantity, cost_price, sell_price, note, recorded_by, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT INTO stock_in (id, date, sku, product_name, product_category, color, size, quantity, cost_price, sell_price, note, image_url, recorded_by, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           id, date, sku, product_name, product_category || '',
           color || '', size || '',
           Number(quantity) || 1,
           Number(cost_price) || 0,
           Number(sell_price) || 0,
-          note || '', recordedBy, now, now
+          note || '', image_url || '', recordedBy, now, now
         ]
       });
 
@@ -119,7 +120,7 @@ export default async function handler(req, res) {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'Missing id' });
 
-      const { quantity, cost_price, sell_price, note, product_name, product_category, date } = req.body;
+      const { quantity, cost_price, sell_price, note, product_name, product_category, date, image_url } = req.body;
       const now = new Date().toISOString();
 
       // ตรวจสอบว่าปริมาณไม่ต่ำกว่าที่ขายไปแล้ว
@@ -143,6 +144,7 @@ export default async function handler(req, res) {
       if (product_name !== undefined) { fields.push('product_name = ?'); args.push(product_name); }
       if (product_category !== undefined) { fields.push('product_category = ?'); args.push(product_category); }
       if (date !== undefined) { fields.push('date = ?'); args.push(date); }
+      if (image_url !== undefined) { fields.push('image_url = ?'); args.push(image_url); }
 
       if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
