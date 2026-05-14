@@ -63,7 +63,7 @@ const emptyForm = (): SkuForm => ({
   grid: {},
 });
 
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4MB limit (Vercel body limit is 4.5MB)
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB — บีบอัดอัตโนมัติก่อนอัพโหลด
 
 export function StockReceiving() {
   const [date, setDate] = useState<Date>(new Date());
@@ -239,7 +239,7 @@ export function StockReceiving() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_IMAGE_BYTES) {
-      toast({ title: 'รูปใหญ่เกินไป', description: 'กรุณาเลือกรูปที่มีขนาดไม่เกิน 4MB', variant: 'destructive' });
+      toast({ title: 'รูปใหญ่เกินไป', description: 'กรุณาเลือกรูปที่มีขนาดไม่เกิน 10MB', variant: 'destructive' });
       return;
     }
     setImageFile(file);
@@ -422,7 +422,7 @@ export function StockReceiving() {
                   <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
                   {imagePreview ? 'เปลี่ยนรูป' : 'เลือกรูปสินค้า'}
                 </Button>
-                <p className="text-[11px] text-muted-foreground">จากกล้อง มือถือ หรือคอมได้เลย (ไม่เกิน 4MB)</p>
+                <p className="text-[11px] text-muted-foreground">จากกล้อง มือถือ หรือคอมได้เลย (ไม่เกิน 10MB · บีบอัดอัตโนมัติ)</p>
               </div>
             </div>
           </div>

@@ -66,8 +66,8 @@ export function StockInventory() {
   });
 
   async function handleImageUpload(rec: StockItem, file: File) {
-    if (file.size > 4 * 1024 * 1024) {
-      toast({ title: 'ไฟล์ใหญ่เกินไป', description: 'ขนาดต้องไม่เกิน 4MB', variant: 'destructive' });
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'ไฟล์ใหญ่เกินไป', description: 'ขนาดต้องไม่เกิน 10MB', variant: 'destructive' });
       return;
     }
     setUploadingRecordId(rec.id);
