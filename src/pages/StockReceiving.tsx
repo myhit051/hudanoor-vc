@@ -11,10 +11,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, PackagePlus, Trash2, X, Copy, ChevronDown, ChevronUp, Lock, Package, Hash, DollarSign } from "lucide-react";
+import { CalendarIcon, PackagePlus, Trash2, X, Copy, ChevronDown, ChevronUp, Lock, Package, Hash, DollarSign, ImagePlus, Loader2 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { useStock } from "@/hooks/use-stock";
-import { NewStockItem } from "@/lib/stock-api";
+import { NewStockItem, uploadProductImage } from "@/lib/stock-api";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -63,6 +63,8 @@ const emptyForm = (): SkuForm => ({
   grid: {},
 });
 
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4MB limit (Vercel body limit is 4.5MB)
+
 export function StockReceiving() {
   const [date, setDate] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -70,8 +72,12 @@ export function StockReceiving() {
   const [colorInput, setColorInput] = useState('');
   const [lastPrices, setLastPrices] = useState({ cost_price: '', sell_price: '' });
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const colorInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const { stockItems, isLoading, addStock, isAdding, deleteStock } = useStock();
   const { user } = useAuth();
@@ -175,29 +181,42 @@ export function StockReceiving() {
 
   const handleSave = () => {
     if (!validate()) return;
-    const dateStr = toLocalDateStr(date);
-    const records: NewStockItem[] = [];
-    for (const color of form.colors) {
-      for (const size of form.sizes) {
-        const qty = parseInt(form.grid[color]?.[size] || '0') || 0;
-        if (qty <= 0) continue;
-        records.push({
-          date: dateStr,
-          sku: form.sku.trim(),
-          product_name: form.product_name.trim(),
-          product_category: form.product_category.trim(),
-          color,
-          size,
-          quantity: qty,
-          cost_price: parseFloat(form.cost_price) || 0,
-          sell_price: parseFloat(form.sell_price) || 0,
-          note: form.note,
-        });
-      }
-    }
-    // save all records sequentially
     (async () => {
       try {
+        let image_url = '';
+        if (imageFile) {
+          setIsUploading(true);
+          try {
+            image_url = await uploadProductImage(imageFile, form.sku.trim());
+          } catch {
+            toast({ title: 'อัปโหลดรูปไม่สำเร็จ', description: 'จะบันทึกสินค้าโดยไม่มีรูป', variant: 'destructive' });
+          } finally {
+            setIsUploading(false);
+          }
+        }
+
+        const dateStr = toLocalDateStr(date);
+        const records: NewStockItem[] = [];
+        for (const color of form.colors) {
+          for (const size of form.sizes) {
+            const qty = parseInt(form.grid[color]?.[size] || '0') || 0;
+            if (qty <= 0) continue;
+            records.push({
+              date: dateStr,
+              sku: form.sku.trim(),
+              product_name: form.product_name.trim(),
+              product_category: form.product_category.trim(),
+              color,
+              size,
+              quantity: qty,
+              cost_price: parseFloat(form.cost_price) || 0,
+              sell_price: parseFloat(form.sell_price) || 0,
+              note: form.note,
+              image_url,
+            });
+          }
+        }
+
         for (const record of records) {
           await addStock(record);
         }
@@ -205,6 +224,7 @@ export function StockReceiving() {
         setLastPrices({ cost_price: form.cost_price, sell_price: form.sell_price });
         setForm(emptyForm());
         setColorInput('');
+        clearImage();
       } catch {
         toast({ title: 'เกิดข้อผิดพลาดระหว่างบันทึก', variant: 'destructive' });
       }
@@ -213,6 +233,23 @@ export function StockReceiving() {
 
   const copyLastPrices = () => {
     setForm(prev => ({ ...prev, cost_price: lastPrices.cost_price, sell_price: lastPrices.sell_price }));
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast({ title: 'รูปใหญ่เกินไป', description: 'กรุณาเลือกรูปที่มีขนาดไม่เกิน 4MB', variant: 'destructive' });
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const clearImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
   // --- Summary ---
@@ -340,6 +377,54 @@ export function StockReceiving() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* รูปสินค้า */}
+          <div>
+            <Label>รูปสินค้า</Label>
+            <div className="mt-1 flex items-start gap-3">
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageSelect}
+              />
+              {imagePreview ? (
+                <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-border shrink-0">
+                  <img src={imagePreview} alt="preview" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={clearImage}
+                    className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5 text-white hover:bg-black/80"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="w-24 h-24 rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-rose-400 hover:text-rose-500 transition-colors shrink-0"
+                >
+                  <ImagePlus className="h-6 w-6" />
+                  <span className="text-[10px]">เลือกรูป</span>
+                </button>
+              )}
+              <div className="flex flex-col gap-1.5 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-8"
+                  onClick={() => imageInputRef.current?.click()}
+                >
+                  <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
+                  {imagePreview ? 'เปลี่ยนรูป' : 'เลือกรูปสินค้า'}
+                </Button>
+                <p className="text-[11px] text-muted-foreground">จากกล้อง มือถือ หรือคอมได้เลย (ไม่เกิน 4MB)</p>
+              </div>
+            </div>
           </div>
 
           {/* Row 2: ราคา + copy */}
@@ -530,12 +615,14 @@ export function StockReceiving() {
           {/* Save button */}
           <Button
             className="w-full bg-gradient-to-r from-rose-500 to-pink-500 text-white h-11 text-base"
-            disabled={isAdding}
+            disabled={isAdding || isUploading}
             onClick={handleSave}
           >
-            {isAdding
-              ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              : <><PackagePlus className="h-4 w-4 mr-2" /><span className="hidden sm:inline">บันทึก SKU นี้ ({gridTotal} ชิ้น) → ไปต่อ SKU ถัดไป</span><span className="sm:hidden">บันทึก ({gridTotal} ชิ้น)</span></>}
+            {isUploading
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />กำลังอัปโหลดรูป...</>
+              : isAdding
+                ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                : <><PackagePlus className="h-4 w-4 mr-2" /><span className="hidden sm:inline">บันทึก SKU นี้ ({gridTotal} ชิ้น) → ไปต่อ SKU ถัดไป</span><span className="sm:hidden">บันทึก ({gridTotal} ชิ้น)</span></>}
           </Button>
         </CardContent>
       </Card>

@@ -363,6 +363,7 @@ export function StockInventory() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-14">รูป</TableHead>
                     <TableHead>SKU</TableHead>
                     <TableHead>ชื่อสินค้า</TableHead>
                     <TableHead>สี</TableHead>
@@ -371,6 +372,7 @@ export function StockInventory() {
                     <TableHead className="text-right">ขายออก</TableHead>
                     <TableHead className="text-right">คงเหลือ</TableHead>
                     <TableHead className="text-right">ต้นทุน/ชิ้น</TableHead>
+                    <TableHead className="text-right">ราคาขาย</TableHead>
                     <TableHead className="text-right">มูลค่าสต๊อก</TableHead>
                     <TableHead>สัดส่วน</TableHead>
                     <TableHead>สถานะ</TableHead>
@@ -389,6 +391,20 @@ export function StockInventory() {
                         key={`${item.sku}-${item.color}-${item.size}-${idx}`}
                         className={isOut ? 'bg-red-50 dark:bg-red-950/20' : isLow ? 'bg-orange-50 dark:bg-orange-950/10' : ''}
                       >
+                        <TableCell className="py-1.5">
+                          {item.image_url ? (
+                            <img
+                              src={item.image_url}
+                              alt={item.product_name}
+                              loading="lazy"
+                              className="w-11 h-11 rounded-md object-cover border border-border"
+                            />
+                          ) : (
+                            <div className="w-11 h-11 rounded-md bg-muted flex items-center justify-center border border-border">
+                              <Package className="h-5 w-5 text-muted-foreground/40" />
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-xs">{item.sku}</TableCell>
                         <TableCell className="font-medium">{item.product_name}</TableCell>
                         <TableCell>{item.color || '-'}</TableCell>
@@ -400,6 +416,9 @@ export function StockInventory() {
                         </TableCell>
                         <TableCell className="text-right text-muted-foreground text-sm">
                           {Number(item.avg_cost_price) > 0 ? `฿${Number(item.avg_cost_price).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '-'}
+                        </TableCell>
+                        <TableCell className="text-right text-blue-600 dark:text-blue-400 text-sm font-medium">
+                          {Number(item.avg_sell_price) > 0 ? `฿${Number(item.avg_sell_price).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '-'}
                         </TableCell>
                         <TableCell className="text-right font-medium text-emerald-700 dark:text-emerald-400 text-sm">
                           {Number(item.stock_value) > 0 ? `฿${Number(item.stock_value).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '-'}
