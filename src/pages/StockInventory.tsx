@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,13 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Package, Pencil, Trash2, Check, X, Search, AlertTriangle,
-  TrendingDown, Boxes, CircleDollarSign, ShoppingCart
+  TrendingDown, Boxes, CircleDollarSign, ShoppingCart,
+  Camera, ImagePlus, Loader2
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend
 } from "recharts";
-import { getStockInventory, getStockItems, deleteStockItem, updateStockItem, StockInventoryItem, StockItem } from "@/lib/stock-api";
+import { getStockInventory, getStockItems, deleteStockItem, updateStockItem, uploadProductImage, StockInventoryItem, StockItem } from "@/lib/stock-api";
 import { toast } from "@/hooks/use-toast";
 
 const STATUS_COLORS = {
@@ -37,6 +38,10 @@ export function StockInventory() {
 
   // Dialog state
   const [selected, setSelected] = useState<StockInventoryItem | null>(null);
+  const [imageEditTarget, setImageEditTarget] = useState<StockInventoryItem | null>(null);
+  const [uploadingRecordId, setUploadingRecordId] = useState<string | null>(null);
+  const [pendingUploadRecordId, setPendingUploadRecordId] = useState<string | null>(null);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "ok" | "low" | "out">("all");
 
@@ -49,6 +54,50 @@ export function StockInventory() {
     ),
     staleTime: 0
   });
+
+  const { data: imageEditRecords = [], isLoading: imageEditLoading } = useQuery({
+    queryKey: ['stock', { imgSku: imageEditTarget?.sku, color: imageEditTarget?.color, size: imageEditTarget?.size }],
+    queryFn: () => getStockItems({ sku: imageEditTarget!.sku }),
+    enabled: !!imageEditTarget,
+    select: (items) => items.filter(
+      (i) => i.color === imageEditTarget?.color && i.size === imageEditTarget?.size
+    ),
+    staleTime: 0
+  });
+
+  async function handleImageUpload(rec: StockItem, file: File) {
+    if (file.size > 4 * 1024 * 1024) {
+      toast({ title: 'ไฟล์ใหญ่เกินไป', description: 'ขนาดต้องไม่เกิน 4MB', variant: 'destructive' });
+      return;
+    }
+    setUploadingRecordId(rec.id);
+    try {
+      const url = await uploadProductImage(file, rec.sku);
+      await updateStockItem(rec.id, { image_url: url });
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast({ title: 'อัพเดตรูปสำเร็จ' });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'อัพโหลดล้มเหลว';
+      toast({ title: 'เกิดข้อผิดพลาด', description: msg, variant: 'destructive' });
+    } finally {
+      setUploadingRecordId(null);
+    }
+  }
+
+  async function handleRemoveImage(rec: StockItem) {
+    if (!confirm('ยืนยันการลบรูปนี้?')) return;
+    setUploadingRecordId(rec.id);
+    try {
+      await updateStockItem(rec.id, { image_url: '' });
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast({ title: 'ลบรูปสำเร็จ' });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'ลบรูปล้มเหลว';
+      toast({ title: 'เกิดข้อผิดพลาด', description: msg, variant: 'destructive' });
+    } finally {
+      setUploadingRecordId(null);
+    }
+  }
 
   const deleteMutation = useMutation({
     mutationFn: deleteStockItem,
@@ -392,18 +441,28 @@ export function StockInventory() {
                         className={isOut ? 'bg-red-50 dark:bg-red-950/20' : isLow ? 'bg-orange-50 dark:bg-orange-950/10' : ''}
                       >
                         <TableCell className="py-1.5">
-                          {item.image_url ? (
-                            <img
-                              src={item.image_url}
-                              alt={item.product_name}
-                              loading="lazy"
-                              className="w-11 h-11 rounded-md object-cover border border-border"
-                            />
-                          ) : (
-                            <div className="w-11 h-11 rounded-md bg-muted flex items-center justify-center border border-border">
-                              <Package className="h-5 w-5 text-muted-foreground/40" />
+                          <button
+                            type="button"
+                            onClick={() => setImageEditTarget(item)}
+                            className="relative w-11 h-11 rounded-md border border-border overflow-hidden group block hover:border-rose-400 transition-colors"
+                            title="แก้ไขรูปสินค้า"
+                          >
+                            {item.image_url ? (
+                              <img
+                                src={item.image_url}
+                                alt={item.product_name}
+                                loading="lazy"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-muted flex items-center justify-center">
+                                <Package className="h-5 w-5 text-muted-foreground/40" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <Camera className="h-4 w-4 text-white" />
                             </div>
-                          )}
+                          </button>
                         </TableCell>
                         <TableCell className="font-mono text-xs">{item.sku}</TableCell>
                         <TableCell className="font-medium">{item.product_name}</TableCell>
@@ -465,6 +524,108 @@ export function StockInventory() {
           )}
         </CardContent>
       </Card>
+
+      {/* Image Edit Dialog */}
+      <Dialog open={!!imageEditTarget} onOpenChange={(open) => { if (!open) { setImageEditTarget(null); setPendingUploadRecordId(null); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ImagePlus className="h-4 w-4 text-rose-500" />
+              แก้ไขรูปสินค้า: {imageEditTarget?.sku}
+              {imageEditTarget?.color && <span className="text-muted-foreground font-normal">/ {imageEditTarget.color}</span>}
+              {imageEditTarget?.size && <span className="text-muted-foreground font-normal">/ {imageEditTarget.size}</span>}
+            </DialogTitle>
+          </DialogHeader>
+
+          <input
+            ref={imageFileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              const targetId = pendingUploadRecordId;
+              const rec = imageEditRecords.find(r => r.id === targetId);
+              e.target.value = '';
+              setPendingUploadRecordId(null);
+              if (file && rec) handleImageUpload(rec, file);
+            }}
+          />
+
+          {imageEditLoading ? (
+            <div className="py-8 text-center text-muted-foreground text-sm">กำลังโหลด...</div>
+          ) : imageEditRecords.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground text-sm">ไม่พบใบรับเข้า</div>
+          ) : (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              <p className="text-xs text-muted-foreground px-1">
+                รูปบนตารางสต๊อกจะแสดงจากใบรับเข้าที่มีรูป (กรณีมีหลายใบ) — แก้ไขรูปได้แยกตามใบ
+              </p>
+              {imageEditRecords.map((rec) => {
+                const isUploading = uploadingRecordId === rec.id;
+                return (
+                  <div key={rec.id} className="flex items-center gap-3 p-3 rounded-lg border border-border">
+                    <div className="w-16 h-16 rounded-md overflow-hidden border border-border shrink-0">
+                      {rec.image_url ? (
+                        <img src={rec.image_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-muted flex items-center justify-center">
+                          <Package className="h-6 w-6 text-muted-foreground/40" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">{rec.date}</p>
+                      <p className="text-xs text-muted-foreground">
+                        จำนวน {rec.quantity} ชิ้น · ต้นทุน ฿{Number(rec.cost_price).toLocaleString()}
+                      </p>
+                      {rec.note && <p className="text-xs text-muted-foreground truncate mt-0.5">{rec.note}</p>}
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8"
+                        disabled={isUploading}
+                        onClick={() => {
+                          setPendingUploadRecordId(rec.id);
+                          imageFileInputRef.current?.click();
+                        }}
+                      >
+                        {isUploading ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                            กำลังบันทึก...
+                          </>
+                        ) : (
+                          <>
+                            <ImagePlus className="h-3.5 w-3.5 mr-1" />
+                            {rec.image_url ? 'เปลี่ยนรูป' : 'เพิ่มรูป'}
+                          </>
+                        )}
+                      </Button>
+                      {rec.image_url && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                          disabled={isUploading}
+                          onClick={() => handleRemoveImage(rec)}
+                          title="ลบรูป"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog */}
       <Dialog open={!!selected} onOpenChange={(open) => { if (!open) { setSelected(null); setEditingId(null); } }}>
