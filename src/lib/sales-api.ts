@@ -28,6 +28,7 @@ export interface SalesOrder {
   final_unit_price: number;
   total_amount: number;
   note: string;
+  shipping_address?: string;
   stock_in_id: string;
   order_id: string;
   recorded_by: string;
@@ -46,6 +47,7 @@ export interface OrderSummary {
   total_items: number;
   total_quantity: number;
   total_amount: number;
+  shipping_address?: string;
   is_legacy: boolean;
   import_source?: string;
   items: SalesOrder[];
@@ -141,6 +143,7 @@ export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
         total_items: 0,
         total_quantity: 0,
         total_amount: 0,
+        shipping_address: sale.shipping_address || '',
         is_legacy: !!sale.is_legacy,
         import_source: sale.import_source,
         items: []

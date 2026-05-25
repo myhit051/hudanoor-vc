@@ -12,7 +12,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, ShoppingCart, Trash2, ChevronsUpDown, Check, Plus, PackageCheck, Lock, Receipt, Package, DollarSign } from "lucide-react";
+import { CalendarIcon, ShoppingCart, Trash2, ChevronsUpDown, Check, Plus, PackageCheck, Lock, Receipt, Package, DollarSign, MapPin } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { useSales } from "@/hooks/use-sales";
 import { useSettings } from "@/hooks/use-settings";
@@ -54,6 +54,7 @@ export function SalesEntry() {
   const [date, setDate] = useState<Date>(new Date());
   const [channel, setChannel] = useState('');
   const [branchOrPlatform, setBranchOrPlatform] = useState('');
+  const [shippingAddress, setShippingAddress] = useState('');
   const [itemForm, setItemForm] = useState(emptyItemForm);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -70,12 +71,16 @@ export function SalesEntry() {
     refetchOnWindowFocus: false
   });
 
-  const handleItemSet = (key: string, value: any) =>
+  const handleItemSet = <K extends keyof typeof emptyItemForm>(
+    key: K,
+    value: K extends 'discount_type' ? (typeof emptyItemForm)[K] : (typeof emptyItemForm)[K] | string
+  ) =>
     setItemForm(prev => ({ ...prev, [key]: value }));
 
   const handleChannelChange = (v: string) => {
     setChannel(v);
     setBranchOrPlatform('');
+    if (v !== 'online') setShippingAddress('');
   };
 
   const handleSelectStock = (item: AvailableStockItem) => {
@@ -167,13 +172,17 @@ export function SalesEntry() {
       discount_type: item.discount_type,
       discount_value: Number(item.discount_value) || 0,
       note: item.note,
+      shipping_address: channel === 'online' ? shippingAddress.trim() : '',
       stock_in_id: item.stock_in_id
     }));
 
   const handleSave = () => {
     if (!validateAndSave()) return;
     addSales(buildOrders(), {
-      onSuccess: () => setCart([])
+      onSuccess: () => {
+        setCart([]);
+        setShippingAddress('');
+      }
     });
   };
 
@@ -184,6 +193,7 @@ export function SalesEntry() {
         setCart([]);
         setChannel('');
         setBranchOrPlatform('');
+        setShippingAddress('');
       }
     });
   };
@@ -292,6 +302,23 @@ export function SalesEntry() {
               </div>
             </div>
 
+            {channel === 'online' && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50/60 p-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+                <Label htmlFor="shipping_address" className="flex items-center gap-1.5 text-sm text-blue-700 dark:text-blue-300">
+                  <MapPin className="h-4 w-4" />
+                  ที่อยู่จัดส่ง <span className="font-normal text-muted-foreground">(ไม่บังคับ)</span>
+                </Label>
+                <Textarea
+                  id="shipping_address"
+                  className="mt-2 min-h-[88px] bg-white/80 dark:bg-gray-950/40"
+                  value={shippingAddress}
+                  onChange={e => setShippingAddress(e.target.value)}
+                  placeholder="วางชื่อผู้รับ เบอร์โทร และที่อยู่จัดส่ง"
+                  rows={3}
+                />
+              </div>
+            )}
+
             {/* เส้นแบ่ง: ส่วนเพิ่มสินค้า */}
             <div className="border-t pt-4">
               <p className="text-sm font-medium text-muted-foreground mb-3">เพิ่มสินค้าในรายการ</p>
@@ -387,7 +414,7 @@ export function SalesEntry() {
                   <div className="flex gap-2 mt-1">
                     <Select
                       value={itemForm.discount_type}
-                      onValueChange={v => { handleItemSet('discount_type', v); handleItemSet('discount_value', 0); }}
+                      onValueChange={v => { handleItemSet('discount_type', v as 'amount' | 'percent'); handleItemSet('discount_value', 0); }}
                     >
                       <SelectTrigger className="w-24 shrink-0">
                         <SelectValue />
@@ -645,6 +672,17 @@ export function SalesEntry() {
                   </AccordionTrigger>
                   <AccordionContent className="px-5 pb-4">
                     <div className="rounded-xl border border-muted/60 overflow-hidden">
+                      {group.channel === 'online' && group.shipping_address && (
+                        <div className="border-b border-blue-100 bg-blue-50/70 px-4 py-3 text-sm dark:border-blue-900/40 dark:bg-blue-950/20">
+                          <div className="flex items-center gap-1.5 font-medium text-blue-700 dark:text-blue-300">
+                            <MapPin className="h-3.5 w-3.5" />
+                            ที่อยู่จัดส่ง
+                          </div>
+                          <p className="mt-1 whitespace-pre-line text-xs text-muted-foreground">
+                            {group.shipping_address}
+                          </p>
+                        </div>
+                      )}
                       {group.items.map((item, i) => (
                         <div
                           key={item.id}

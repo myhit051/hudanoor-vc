@@ -8,7 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSales } from '@/hooks/use-sales';
 import { groupSalesByOrder } from '@/lib/sales-api';
-import { Search, History, Trash2, Loader2, PackageCheck, TrendingUp, ShoppingCart, Package } from 'lucide-react';
+import { Search, History, Trash2, Loader2, PackageCheck, TrendingUp, ShoppingCart, Package, Store, Globe2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -36,35 +36,40 @@ export function OrderHistory() {
         setDateFrom(toLocalDateStr(today));
         setDateTo(toLocalDateStr(today));
         break;
-      case 'yesterday':
+      case 'yesterday': {
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
         setDateFrom(toLocalDateStr(yesterday));
         setDateTo(toLocalDateStr(yesterday));
         break;
-      case 'last7days':
+      }
+      case 'last7days': {
         const last7 = new Date(today);
         last7.setDate(last7.getDate() - 6);
         setDateFrom(toLocalDateStr(last7));
         setDateTo(toLocalDateStr(today));
         break;
-      case 'last30days':
+      }
+      case 'last30days': {
         const last30 = new Date(today);
         last30.setDate(last30.getDate() - 29);
         setDateFrom(toLocalDateStr(last30));
         setDateTo(toLocalDateStr(today));
         break;
-      case 'thisMonth':
+      }
+      case 'thisMonth': {
         const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         setDateFrom(toLocalDateStr(firstDayThisMonth));
         setDateTo(toLocalDateStr(today));
         break;
-      case 'lastMonth':
+      }
+      case 'lastMonth': {
         const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
         const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
         setDateFrom(toLocalDateStr(firstDayLastMonth));
         setDateTo(toLocalDateStr(lastDayLastMonth));
         break;
+      }
       case 'all':
         setDateFrom('');
         setDateTo('');
@@ -101,16 +106,36 @@ export function OrderHistory() {
   const summary = useMemo(() => {
     let totalAmount = 0;
     let totalItems = 0;
+    const channelTotals = {
+      store: {
+        totalAmount: 0,
+        totalOrders: 0,
+        totalItems: 0,
+      },
+      online: {
+        totalAmount: 0,
+        totalOrders: 0,
+        totalItems: 0,
+      },
+    };
     
     groupedOrders.forEach(order => {
-      totalAmount += order.total_amount;
-      totalItems += order.total_quantity;
+      const orderAmount = Number(order.total_amount) || 0;
+      const orderQuantity = Number(order.total_quantity) || 0;
+      const channelKey = order.channel === 'online' ? 'online' : 'store';
+
+      totalAmount += orderAmount;
+      totalItems += orderQuantity;
+      channelTotals[channelKey].totalAmount += orderAmount;
+      channelTotals[channelKey].totalOrders += 1;
+      channelTotals[channelKey].totalItems += orderQuantity;
     });
 
     return {
       totalAmount,
       totalOrders: groupedOrders.length,
-      totalItems
+      totalItems,
+      channelTotals
     };
   }, [groupedOrders]);
 
@@ -174,6 +199,51 @@ export function OrderHistory() {
               <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {summary.totalItems.toLocaleString('th-TH')} <span className="text-base font-normal text-muted-foreground">ชิ้น</span>
               </h3>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Channel Sales Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-emerald-100 dark:border-emerald-900/30">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+                <Store className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-muted-foreground mb-1">ยอดขายหน้าร้าน</p>
+                <h3 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 break-words">
+                  ฿{summary.channelTotals.store.totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                </h3>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
+              <span>{summary.channelTotals.store.totalOrders.toLocaleString('th-TH')} บิล</span>
+              <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+              <span>{summary.channelTotals.store.totalItems.toLocaleString('th-TH')} ชิ้น</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-blue-100 dark:border-blue-900/30">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
+                <Globe2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-muted-foreground mb-1">ยอดขายออนไลน์</p>
+                <h3 className="text-2xl font-bold text-blue-600 dark:text-blue-400 break-words">
+                  ฿{summary.channelTotals.online.totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                </h3>
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
+              <span>{summary.channelTotals.online.totalOrders.toLocaleString('th-TH')} บิล</span>
+              <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+              <span>{summary.channelTotals.online.totalItems.toLocaleString('th-TH')} ชิ้น</span>
             </div>
           </CardContent>
         </Card>

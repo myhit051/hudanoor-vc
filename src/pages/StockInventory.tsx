@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   Package, Pencil, Trash2, Check, X, Search, AlertTriangle,
   TrendingDown, Boxes, CircleDollarSign, ShoppingCart,
-  Camera, ImagePlus, Loader2
+  Camera, ImagePlus, Loader2, SlidersHorizontal
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -167,9 +167,17 @@ export function StockInventory() {
   }, [inventory]);
 
   const lowStockItems = useMemo(
-    () => inventory.filter(i => Number(i.remaining) > 0 && Number(i.remaining) <= 3),
+    () => inventory
+      .filter(i => Number(i.remaining) > 0 && Number(i.remaining) <= 3)
+      .sort((a, b) => {
+        const remainingDiff = Number(a.remaining) - Number(b.remaining);
+        if (remainingDiff !== 0) return remainingDiff;
+        return String(a.product_name || a.sku).localeCompare(String(b.product_name || b.sku), 'th');
+      }),
     [inventory]
   );
+  const visibleLowStockItems = lowStockItems.slice(0, 6);
+  const hiddenLowStockCount = Math.max(lowStockItems.length - visibleLowStockItems.length, 0);
 
   // Chart data — top 10 by remaining
   const barData = useMemo(() => {
@@ -223,15 +231,82 @@ export function StockInventory() {
 
       {/* Alert banner */}
       {lowStockItems.length > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-orange-200 bg-orange-50 dark:bg-orange-950/20 dark:border-orange-800 px-4 py-3">
-          <AlertTriangle className="h-4 w-4 text-orange-500 mt-0.5 shrink-0" />
-          <div className="text-sm">
-            <span className="font-semibold text-orange-700 dark:text-orange-400">สินค้าใกล้หมด {lowStockItems.length} รายการ: </span>
-            <span className="text-orange-600 dark:text-orange-300">
-              {lowStockItems.map(i => `${i.product_name}${i.color ? ' ' + i.color : ''}${i.size ? ' ' + i.size : ''} (เหลือ ${i.remaining})`).join(' · ')}
-            </span>
-          </div>
-        </div>
+        <Card className="overflow-hidden border-orange-200 bg-orange-50/80 shadow-sm dark:border-orange-900/50 dark:bg-orange-950/20">
+          <CardContent className="p-0">
+            <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr]">
+              <div className="border-b border-orange-200/70 p-4 dark:border-orange-900/50 lg:border-b-0 lg:border-r">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/40">
+                    <AlertTriangle className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">สินค้าใกล้หมด</p>
+                    <p className="mt-1 text-2xl font-bold leading-none text-orange-600 dark:text-orange-400">
+                      {lowStockItems.length.toLocaleString('th-TH')}
+                      <span className="ml-1 text-sm font-medium text-orange-700/70 dark:text-orange-300/80">รายการ</span>
+                    </p>
+                    <p className="mt-2 text-xs text-orange-700/80 dark:text-orange-300/80">เหลือ 1-3 ชิ้น เรียงตามจำนวนคงเหลือน้อยสุด</p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className={`mt-4 h-8 w-full justify-center border-orange-300 text-xs text-orange-700 hover:bg-orange-100 dark:border-orange-800 dark:text-orange-300 dark:hover:bg-orange-950 ${statusFilter === "low" ? "bg-orange-100 dark:bg-orange-950" : "bg-white/70 dark:bg-transparent"}`}
+                  onClick={() => setStatusFilter("low")}
+                >
+                  <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
+                  ดูเฉพาะสินค้าใกล้หมด
+                </Button>
+              </div>
+
+              <div className="bg-orange-200/70 dark:bg-orange-900/50">
+                <div className="grid grid-cols-1 gap-px sm:grid-cols-2 xl:grid-cols-3">
+                  {visibleLowStockItems.map((item, idx) => {
+                    const remaining = Number(item.remaining);
+                    const totalIn = Number(item.total_in);
+                    const pct = totalIn > 0 ? Math.max(6, Math.min(Math.round((remaining / totalIn) * 100), 100)) : 6;
+
+                    return (
+                      <div
+                        key={`${item.sku}-${item.color}-${item.size}-low-${idx}`}
+                        className="min-w-0 bg-orange-50/80 p-3 dark:bg-orange-950/20"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-foreground">{item.product_name}</p>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                              {item.sku}
+                              {(item.color || item.size) && ` · ${[item.color, item.size].filter(Boolean).join(' / ')}`}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className="shrink-0 border-orange-300 bg-white text-orange-600 dark:bg-orange-950/40 dark:text-orange-300">
+                            เหลือ {remaining}
+                          </Badge>
+                        </div>
+                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-orange-100 dark:bg-orange-950">
+                          <div className="h-full rounded-full bg-orange-500" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {hiddenLowStockCount > 0 && (
+                  <div className="mt-px flex items-center justify-between gap-3 bg-orange-50/80 px-4 py-2 text-xs text-orange-700 dark:bg-orange-950/20 dark:text-orange-300">
+                    <span>ยังมีอีก {hiddenLowStockCount.toLocaleString('th-TH')} รายการ</span>
+                    <button
+                      type="button"
+                      className="font-medium underline-offset-4 hover:underline"
+                      onClick={() => setStatusFilter("low")}
+                    >
+                      เปิดดูในตาราง
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Summary Cards */}

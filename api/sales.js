@@ -68,6 +68,7 @@ export default async function handler(req, res) {
             final_unit_price: unitPrice,
             total_amount: total,
             note: r.note || '',
+            shipping_address: '',
             stock_in_id: '',
             order_id: '',
             recorded_by: r.recorded_by || r.import_source || '',
@@ -141,7 +142,7 @@ export default async function handler(req, res) {
       for (const item of items) {
         const { date, channel, branch_or_platform, sku, product_name, product_category,
                 color, size, quantity, unit_price, discount_type, discount_value,
-                note, stock_in_id } = item;
+                note, shipping_address, stock_in_id } = item;
 
         if (!date || !sku || !product_name || !stock_in_id) {
           return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบ (date, sku, product_name, stock_in_id)' });
@@ -167,7 +168,7 @@ export default async function handler(req, res) {
         processed.push({ date, channel, branch_or_platform, sku, product_name,
           product_category: product_category || '', color, size,
           qty, price, discType, discVal, discountAmount, finalUnitPrice, totalAmount,
-          note, stock_in_id });
+          note, shipping_address, stock_in_id });
       }
 
       // For each item without product_category, try to inherit from stock_in
@@ -213,14 +214,16 @@ export default async function handler(req, res) {
           sql: `INSERT INTO sales_orders
                   (id, date, channel, branch_or_platform, sku, product_name, product_category,
                    color, size, quantity, unit_price, discount_type, discount_value, discount_amount,
-                   final_unit_price, total_amount, note, stock_in_id, order_id, recorded_by, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                   final_unit_price, total_amount, note, shipping_address, stock_in_id, order_id, recorded_by, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           args: [
             id, p.date, p.channel || '', p.branch_or_platform || '',
             p.sku, p.product_name, p.product_category || '',
             p.color || '', p.size || '',
             p.qty, p.price, p.discType, p.discVal, p.discountAmount,
-            p.finalUnitPrice, p.totalAmount, p.note || '', p.stock_in_id, orderId, recordedBy, now
+            p.finalUnitPrice, p.totalAmount, p.note || '',
+            p.channel === 'online' ? (p.shipping_address || '') : '',
+            p.stock_in_id, orderId, recordedBy, now
           ]
         });
       }
