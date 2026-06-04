@@ -79,7 +79,7 @@ export function OrderHistory() {
     }
   };
 
-  const { salesOrders, isLoading, deleteSale, deleteOrder, isDeleting, isDeletingOrder } = useSales({
+  const { salesOrders, isLoading, deleteSale, deleteOrder, isDeleting, isDeletingOrder, updateChannel, isUpdatingChannel } = useSales({
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
     include_legacy: true,
@@ -164,6 +164,17 @@ export function OrderHistory() {
       deleteSale(orderId);
     } else {
       deleteOrder(orderId);
+    }
+  };
+
+  // Handle Channel Edit
+  const handleChangeChannel = (group: typeof groupedOrders[number], newChannel: 'store' | 'online') => {
+    const current = group.channel === 'online' ? 'online' : 'store';
+    if (current === newChannel) return;
+    if (group.is_legacy) {
+      updateChannel({ id: group.items[0].id, channel: newChannel });
+    } else {
+      updateChannel({ order_id: group.order_id, channel: newChannel });
     }
   };
 
@@ -469,10 +480,27 @@ export function OrderHistory() {
                       
                       {(() => {
                         const isSheetImport = group.is_legacy && group.import_source === 'sheet-import';
-                        const canDelete = !isSheetImport && (user?.role === 'admin' || user?.name === group.recorded_by);
-                        if (!canDelete) return null;
+                        const canEdit = !isSheetImport && (user?.role === 'admin' || user?.name === group.recorded_by);
+                        if (!canEdit) return null;
+                        const currentChannel = group.channel === 'online' ? 'online' : 'store';
                         return (
-                          <div className="px-4 py-3 bg-muted/20 border-t border-muted/60 flex justify-end">
+                          <div className="px-4 py-3 bg-muted/20 border-t border-muted/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground shrink-0">ช่องทางขาย:</span>
+                              <Select
+                                value={currentChannel}
+                                onValueChange={(v) => handleChangeChannel(group, v as 'store' | 'online')}
+                                disabled={isUpdatingChannel}
+                              >
+                                <SelectTrigger className="h-8 w-32 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="store">หน้าร้าน</SelectItem>
+                                  <SelectItem value="online">ออนไลน์</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                             <Button
                               variant="destructive"
                               size="sm"

@@ -3,7 +3,7 @@ import { authenticate } from '../lib/auth-middleware.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -230,6 +230,75 @@ export default async function handler(req, res) {
       await db.batch(batchOps);
 
       return res.status(201).json({ success: true, count: processed.length });
+    }
+
+    // PATCH /api/sales — แก้ไขช่องทางขาย (channel) ของออเดอร์ หรือรายการ legacy
+    // body: { id?, order_id?, channel }
+    if (req.method === 'PATCH') {
+      const authUser = authenticate(req);
+      if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+
+      const { id, order_id, channel } = req.body || {};
+      if (!id && !order_id) return res.status(400).json({ error: 'Missing id or order_id' });
+      if (channel !== 'store' && channel !== 'online') {
+        return res.status(400).json({ error: 'channel ต้องเป็น store หรือ online เท่านั้น' });
+      }
+
+      // legacy_sales (only by id, manual rows only)
+      if (id && !order_id) {
+        const legacyCheck = await db.execute({
+          sql: 'SELECT id, recorded_by, import_source FROM legacy_sales WHERE id = ?',
+          args: [id],
+        });
+        if (legacyCheck.rows.length > 0) {
+          const row = legacyCheck.rows[0];
+          if (row.import_source === 'sheet-import') {
+            return res.status(400).json({ error: 'รายการที่ import จาก Sheet แก้ไขไม่ได้' });
+          }
+          if (authUser.role !== 'admin' && authUser.name !== row.recorded_by) {
+            return res.status(403).json({ error: 'ไม่มีสิทธิ์แก้ไขรายการนี้' });
+          }
+          await db.execute({ sql: 'UPDATE legacy_sales SET channel = ? WHERE id = ?', args: [channel, id] });
+          return res.status(200).json({ success: true });
+        }
+      }
+
+      // sales_orders (by order_id updates all items, or by id for a single row)
+      let checkSql = '';
+      let checkArgs = [];
+      if (order_id) {
+        checkSql = 'SELECT recorded_by FROM sales_orders WHERE order_id = ? LIMIT 1';
+        checkArgs = [order_id];
+      } else {
+        checkSql = 'SELECT recorded_by FROM sales_orders WHERE id = ?';
+        checkArgs = [id];
+      }
+      const checkResult = await db.execute({ sql: checkSql, args: checkArgs });
+      if (checkResult.rows.length === 0) {
+        return res.status(404).json({ error: 'ไม่พบรายการ' });
+      }
+
+      const creator = checkResult.rows[0].recorded_by;
+      if (authUser.role !== 'admin' && authUser.name !== creator) {
+        return res.status(403).json({ error: 'ไม่มีสิทธิ์แก้ไขรายการนี้ (แก้ได้เฉพาะ Admin หรือผู้บันทึก)' });
+      }
+
+      // เมื่อเปลี่ยนเป็นหน้าร้าน ให้ล้างที่อยู่จัดส่ง (เก็บเฉพาะออนไลน์)
+      if (order_id) {
+        if (channel === 'store') {
+          await db.execute({ sql: "UPDATE sales_orders SET channel = ?, shipping_address = '' WHERE order_id = ?", args: [channel, order_id] });
+        } else {
+          await db.execute({ sql: 'UPDATE sales_orders SET channel = ? WHERE order_id = ?', args: [channel, order_id] });
+        }
+      } else {
+        if (channel === 'store') {
+          await db.execute({ sql: "UPDATE sales_orders SET channel = ?, shipping_address = '' WHERE id = ?", args: [channel, id] });
+        } else {
+          await db.execute({ sql: 'UPDATE sales_orders SET channel = ? WHERE id = ?', args: [channel, id] });
+        }
+      }
+
+      return res.status(200).json({ success: true });
     }
 
     // DELETE /api/sales?id=xxx หรือ ?order_id=xxx — ลบยอดขาย (available stock คำนวณจาก sales_orders อัตโนมัติ)

@@ -125,6 +125,22 @@ export async function deleteOrder(order_id: string): Promise<void> {
   }
 }
 
+export async function updateOrderChannel(params: {
+  id?: string;
+  order_id?: string;
+  channel: 'store' | 'online';
+}): Promise<void> {
+  const res = await fetch(`${API_BASE}/sales`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to update channel');
+  }
+}
+
 export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
   const groups: Record<string, OrderSummary> = {};
 
