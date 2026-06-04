@@ -26,6 +26,7 @@ export function OrderHistory() {
   const [dateTo, setDateTo] = useState(toLocalDateStr(new Date()));
   const [searchQuery, setSearchQuery] = useState('');
   const [preset, setPreset] = useState('today');
+  const [channelFilter, setChannelFilter] = useState('all');
 
   const handlePresetChange = (value: string) => {
     setPreset(value);
@@ -86,6 +87,10 @@ export function OrderHistory() {
   // Filter sales based on search query (date filter is server-side)
   const filteredSales = useMemo(() => {
     return salesOrders.filter(sale => {
+      if (channelFilter !== 'all') {
+        const saleChannel = sale.channel === 'online' ? 'online' : 'store';
+        if (saleChannel !== channelFilter) return false;
+      }
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         return (
@@ -98,7 +103,7 @@ export function OrderHistory() {
       }
       return true;
     });
-  }, [salesOrders, searchQuery]);
+  }, [salesOrders, searchQuery, channelFilter]);
 
   const groupedOrders = useMemo(() => groupSalesByOrder(filteredSales), [filteredSales]);
 
@@ -251,7 +256,7 @@ export function OrderHistory() {
 
       <Card className="card-elevated">
         <CardContent className="p-4 sm:p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
             <div className="space-y-2">
               <Label>ช่วงเวลา</Label>
               <Select value={preset} onValueChange={handlePresetChange}>
@@ -266,6 +271,19 @@ export function OrderHistory() {
                   <SelectItem value="thisMonth">เดือนนี้</SelectItem>
                   <SelectItem value="lastMonth">เดือนที่ผ่านมา</SelectItem>
                   <SelectItem value="all">ทั้งหมด</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>ช่องทางขาย</Label>
+              <Select value={channelFilter} onValueChange={setChannelFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="เลือกช่องทาง" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">ทุกช่องทาง</SelectItem>
+                  <SelectItem value="store">หน้าร้าน</SelectItem>
+                  <SelectItem value="online">ออนไลน์</SelectItem>
                 </SelectContent>
               </Select>
             </div>
