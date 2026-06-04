@@ -232,17 +232,46 @@ export default async function handler(req, res) {
       return res.status(201).json({ success: true, count: processed.length });
     }
 
-    // PATCH /api/sales — แก้ไขช่องทางขาย (channel) ของออเดอร์ หรือรายการ legacy
-    // body: { id?, order_id?, channel }
+    // PATCH /api/sales — แก้ไขช่องทางขาย (channel) และ/หรือ ผู้บันทึก (recorded_by) ของออเดอร์ หรือรายการ legacy
+    // body: { id?, order_id?, channel?, recorded_by? }
     if (req.method === 'PATCH') {
       const authUser = authenticate(req);
       if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
 
-      const { id, order_id, channel } = req.body || {};
+      const { id, order_id, channel, recorded_by } = req.body || {};
       if (!id && !order_id) return res.status(400).json({ error: 'Missing id or order_id' });
-      if (channel !== 'store' && channel !== 'online') {
+
+      const hasChannel = channel !== undefined;
+      const hasRecordedBy = recorded_by !== undefined;
+      if (!hasChannel && !hasRecordedBy) {
+        return res.status(400).json({ error: 'ต้องระบุ channel หรือ recorded_by อย่างน้อยหนึ่งอย่าง' });
+      }
+      if (hasChannel && channel !== 'store' && channel !== 'online') {
         return res.status(400).json({ error: 'channel ต้องเป็น store หรือ online เท่านั้น' });
       }
+      const newRecordedBy = hasRecordedBy ? String(recorded_by).trim() : '';
+      if (hasRecordedBy && !newRecordedBy) {
+        return res.status(400).json({ error: 'recorded_by ต้องไม่เป็นค่าว่าง' });
+      }
+
+      // สร้าง SET clause แบบ dynamic เพื่อรองรับการแก้ channel และ/หรือ recorded_by
+      // เมื่อเปลี่ยนเป็นหน้าร้าน ให้ล้างที่อยู่จัดส่ง (เก็บเฉพาะออนไลน์)
+      const buildSet = () => {
+        const setParts = [];
+        const setArgs = [];
+        if (hasChannel) {
+          setParts.push('channel = ?');
+          setArgs.push(channel);
+          if (channel === 'store') {
+            setParts.push("shipping_address = ''");
+          }
+        }
+        if (hasRecordedBy) {
+          setParts.push('recorded_by = ?');
+          setArgs.push(newRecordedBy);
+        }
+        return { setClause: setParts.join(', '), setArgs };
+      };
 
       // legacy_sales (only by id, manual rows only)
       if (id && !order_id) {
@@ -258,7 +287,8 @@ export default async function handler(req, res) {
           if (authUser.role !== 'admin' && authUser.name !== row.recorded_by) {
             return res.status(403).json({ error: 'ไม่มีสิทธิ์แก้ไขรายการนี้' });
           }
-          await db.execute({ sql: 'UPDATE legacy_sales SET channel = ? WHERE id = ?', args: [channel, id] });
+          const { setClause, setArgs } = buildSet();
+          await db.execute({ sql: `UPDATE legacy_sales SET ${setClause} WHERE id = ?`, args: [...setArgs, id] });
           return res.status(200).json({ success: true });
         }
       }
@@ -283,19 +313,11 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'ไม่มีสิทธิ์แก้ไขรายการนี้ (แก้ได้เฉพาะ Admin หรือผู้บันทึก)' });
       }
 
-      // เมื่อเปลี่ยนเป็นหน้าร้าน ให้ล้างที่อยู่จัดส่ง (เก็บเฉพาะออนไลน์)
+      const { setClause, setArgs } = buildSet();
       if (order_id) {
-        if (channel === 'store') {
-          await db.execute({ sql: "UPDATE sales_orders SET channel = ?, shipping_address = '' WHERE order_id = ?", args: [channel, order_id] });
-        } else {
-          await db.execute({ sql: 'UPDATE sales_orders SET channel = ? WHERE order_id = ?', args: [channel, order_id] });
-        }
+        await db.execute({ sql: `UPDATE sales_orders SET ${setClause} WHERE order_id = ?`, args: [...setArgs, order_id] });
       } else {
-        if (channel === 'store') {
-          await db.execute({ sql: "UPDATE sales_orders SET channel = ?, shipping_address = '' WHERE id = ?", args: [channel, id] });
-        } else {
-          await db.execute({ sql: 'UPDATE sales_orders SET channel = ? WHERE id = ?', args: [channel, id] });
-        }
+        await db.execute({ sql: `UPDATE sales_orders SET ${setClause} WHERE id = ?`, args: [...setArgs, id] });
       }
 
       return res.status(200).json({ success: true });

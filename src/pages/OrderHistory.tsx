@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSales } from '@/hooks/use-sales';
+import { useEmployees } from '@/hooks/use-employees';
 import { groupSalesByOrder } from '@/lib/sales-api';
 import { Search, History, Trash2, Loader2, PackageCheck, TrendingUp, ShoppingCart, Package, Store, Globe2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -79,11 +80,13 @@ export function OrderHistory() {
     }
   };
 
-  const { salesOrders, isLoading, deleteSale, deleteOrder, isDeleting, isDeletingOrder, updateChannel, isUpdatingChannel } = useSales({
+  const { salesOrders, isLoading, deleteSale, deleteOrder, isDeleting, isDeletingOrder, updateChannel, isUpdatingChannel, updateRecordedBy, isUpdatingRecordedBy } = useSales({
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
     include_legacy: true,
   });
+
+  const { employees } = useEmployees();
 
   // Unique list of recorders for the filter dropdown
   const recorders = useMemo(() => {
@@ -93,6 +96,13 @@ export function OrderHistory() {
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'th'));
   }, [salesOrders]);
+
+  // Active employee names — used as options when reassigning the recorder of an order
+  const employeeNames = useMemo(() => {
+    return employees
+      .filter(e => e.isActive && e.name)
+      .map(e => e.name);
+  }, [employees]);
 
   // Filter sales based on search query (date filter is server-side)
   const filteredSales = useMemo(() => {
@@ -175,6 +185,16 @@ export function OrderHistory() {
       updateChannel({ id: group.items[0].id, channel: newChannel });
     } else {
       updateChannel({ order_id: group.order_id, channel: newChannel });
+    }
+  };
+
+  // Handle Recorder (ผู้บันทึก) Edit
+  const handleChangeRecordedBy = (group: typeof groupedOrders[number], newName: string) => {
+    if (!newName || newName === group.recorded_by) return;
+    if (group.is_legacy) {
+      updateRecordedBy({ id: group.items[0].id, recorded_by: newName });
+    } else {
+      updateRecordedBy({ order_id: group.order_id, recorded_by: newName });
     }
   };
 
@@ -483,23 +503,46 @@ export function OrderHistory() {
                         const canEdit = !isSheetImport && (user?.role === 'admin' || user?.name === group.recorded_by);
                         if (!canEdit) return null;
                         const currentChannel = group.channel === 'online' ? 'online' : 'store';
+                        // ตัวเลือกผู้บันทึก: รวมพนักงานที่ active กับชื่อผู้บันทึกปัจจุบัน (เผื่อชื่อเดิมไม่อยู่ในรายชื่อพนักงาน)
+                        const recorderOptions = Array.from(
+                          new Set([...employeeNames, group.recorded_by].filter(Boolean))
+                        ).sort((a, b) => a.localeCompare(b, 'th'));
                         return (
                           <div className="px-4 py-3 bg-muted/20 border-t border-muted/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground shrink-0">ช่องทางขาย:</span>
-                              <Select
-                                value={currentChannel}
-                                onValueChange={(v) => handleChangeChannel(group, v as 'store' | 'online')}
-                                disabled={isUpdatingChannel}
-                              >
-                                <SelectTrigger className="h-8 w-32 text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="store">หน้าร้าน</SelectItem>
-                                  <SelectItem value="online">ออนไลน์</SelectItem>
-                                </SelectContent>
-                              </Select>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground shrink-0">ช่องทางขาย:</span>
+                                <Select
+                                  value={currentChannel}
+                                  onValueChange={(v) => handleChangeChannel(group, v as 'store' | 'online')}
+                                  disabled={isUpdatingChannel}
+                                >
+                                  <SelectTrigger className="h-8 w-32 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="store">หน้าร้าน</SelectItem>
+                                    <SelectItem value="online">ออนไลน์</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground shrink-0">ผู้บันทึก:</span>
+                                <Select
+                                  value={group.recorded_by || undefined}
+                                  onValueChange={(v) => handleChangeRecordedBy(group, v)}
+                                  disabled={isUpdatingRecordedBy}
+                                >
+                                  <SelectTrigger className="h-8 w-40 text-xs">
+                                    <SelectValue placeholder="เลือกผู้บันทึก" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {recorderOptions.map(name => (
+                                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </div>
                             <Button
                               variant="destructive"
