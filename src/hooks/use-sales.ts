@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSalesOrders, addSalesOrder, addSalesOrders, deleteSalesOrder, deleteOrder, updateOrderChannel, NewSalesOrder } from '@/lib/sales-api';
+import { getSalesOrders, addSalesOrder, addSalesOrders, deleteSalesOrder, deleteOrder, updateOrderChannel, updateOrderRecordedBy, NewSalesOrder } from '@/lib/sales-api';
 import { toast } from '@/hooks/use-toast';
 
 export function useSales(params?: {
@@ -79,6 +79,17 @@ export function useSales(params?: {
     }
   });
 
+  const updateRecordedByMutation = useMutation({
+    mutationFn: updateOrderRecordedBy,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      toast({ title: 'แก้ไขผู้บันทึกสำเร็จ', description: 'อัปเดตผู้บันทึกเรียบร้อยแล้ว' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'เกิดข้อผิดพลาด', description: error.message, variant: 'destructive' });
+    }
+  });
+
   return {
     salesOrders,
     isLoading,
@@ -92,6 +103,8 @@ export function useSales(params?: {
     deleteOrder: deleteOrderMutation.mutate,
     isDeletingOrder: deleteOrderMutation.isPending,
     updateChannel: updateChannelMutation.mutate,
-    isUpdatingChannel: updateChannelMutation.isPending
+    isUpdatingChannel: updateChannelMutation.isPending,
+    updateRecordedBy: updateRecordedByMutation.mutate,
+    isUpdatingRecordedBy: updateRecordedByMutation.isPending
   };
 }

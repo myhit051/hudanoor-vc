@@ -141,6 +141,22 @@ export async function updateOrderChannel(params: {
   }
 }
 
+export async function updateOrderRecordedBy(params: {
+  id?: string;
+  order_id?: string;
+  recorded_by: string;
+}): Promise<void> {
+  const res = await fetch(`${API_BASE}/sales`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to update recorder');
+  }
+}
+
 export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
   const groups: Record<string, OrderSummary> = {};
 
