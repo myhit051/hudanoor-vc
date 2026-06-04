@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSales } from '@/hooks/use-sales';
-import { useEmployees } from '@/hooks/use-employees';
+import { useUsers } from '@/hooks/use-users';
 import { groupSalesByOrder } from '@/lib/sales-api';
 import { Search, History, Trash2, Loader2, PackageCheck, TrendingUp, ShoppingCart, Package, Store, Globe2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -86,7 +86,7 @@ export function OrderHistory() {
     include_legacy: true,
   });
 
-  const { employees } = useEmployees();
+  const { users } = useUsers();
 
   // Unique list of recorders for the filter dropdown
   const recorders = useMemo(() => {
@@ -97,12 +97,13 @@ export function OrderHistory() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'th'));
   }, [salesOrders]);
 
-  // Active employee names — used as options when reassigning the recorder of an order
-  const employeeNames = useMemo(() => {
-    return employees
-      .filter(e => e.isActive && e.name)
-      .map(e => e.name);
-  }, [employees]);
+  // Active user-account names — used as options when reassigning the recorder of an order
+  // (recorded_by stores the login account name, not the employee name)
+  const userNames = useMemo(() => {
+    return users
+      .filter(u => u.name)
+      .map(u => u.name);
+  }, [users]);
 
   // Filter sales based on search query (date filter is server-side)
   const filteredSales = useMemo(() => {
@@ -503,9 +504,9 @@ export function OrderHistory() {
                         const canEdit = !isSheetImport && (user?.role === 'admin' || user?.name === group.recorded_by);
                         if (!canEdit) return null;
                         const currentChannel = group.channel === 'online' ? 'online' : 'store';
-                        // ตัวเลือกผู้บันทึก: รวมพนักงานที่ active กับชื่อผู้บันทึกปัจจุบัน (เผื่อชื่อเดิมไม่อยู่ในรายชื่อพนักงาน)
+                        // ตัวเลือกผู้บันทึก: รวมบัญชีผู้ใช้งานที่ active กับชื่อผู้บันทึกปัจจุบัน (เผื่อชื่อเดิมไม่อยู่ในรายชื่อผู้ใช้งาน)
                         const recorderOptions = Array.from(
-                          new Set([...employeeNames, group.recorded_by].filter(Boolean))
+                          new Set([...userNames, group.recorded_by].filter(Boolean))
                         ).sort((a, b) => a.localeCompare(b, 'th'));
                         return (
                           <div className="px-4 py-3 bg-muted/20 border-t border-muted/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

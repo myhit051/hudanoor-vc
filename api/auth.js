@@ -76,6 +76,23 @@ export default async function handler(req, res) {
     }
 
     // ═══════════════════════════════════════
+    // ACTION: user-names — รายชื่อบัญชีผู้ใช้งานที่ active (ผู้ล็อกอินทุกคนเรียกได้)
+    // GET /api/auth?action=user-names — ใช้เป็นตัวเลือก "ผู้บันทึก" ในหน้าประวัติการขาย
+    // คืนเฉพาะ id + name (ไม่เปิดเผย role/menus/pin); ชื่อผู้บันทึกแสดงอยู่ในหน้านั้นอยู่แล้ว
+    // ═══════════════════════════════════════
+    if (action === 'user-names') {
+      const authUser = authenticate(req);
+      if (!authUser) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      if (req.method !== 'GET') {
+        return res.status(405).json({ error: 'Method not allowed' });
+      }
+      const result = await db.execute('SELECT id, name FROM users WHERE is_active = 1 ORDER BY name');
+      return res.status(200).json({ data: result.rows });
+    }
+
+    // ═══════════════════════════════════════
     // ACTION: users — จัดการผู้ใช้ (Admin only)
     // GET/POST/PUT/DELETE /api/auth?action=users
     // ═══════════════════════════════════════
