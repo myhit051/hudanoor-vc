@@ -41,6 +41,7 @@ export default async function handler(req, res) {
     await initSchema();
     const db = getTursoClient();
 
+
     // ═══════════════════════════════════════
     // ACTION: seed — สร้างผู้ใช้เริ่มต้น
     // GET /api/auth?action=seed
@@ -88,8 +89,80 @@ export default async function handler(req, res) {
       if (req.method !== 'GET') {
         return res.status(405).json({ error: 'Method not allowed' });
       }
-      const result = await db.execute('SELECT id, name FROM users WHERE is_active = 1 ORDER BY name');
+      // แหล่งเดียว: บัญชีล็อกอินที่ผูกกับพนักงาน (employees.account_active = 1)
+      // คืน account_name เป็น "name" เพื่อให้ตรงกับค่า recorded_by ที่ใช้คิดคอมเหมือนเดิมเป๊ะ
+      const result = await db.execute(
+        `SELECT id, account_name AS name FROM employees WHERE account_active = 1 AND account_name != '' ORDER BY account_name`
+      );
       return res.status(200).json({ data: result.rows });
+    }
+
+    // ═══════════════════════════════════════
+    // ACTION: accounts — จัดการบัญชีล็อกอินบนตาราง employees (Admin only)
+    // GET  /api/auth?action=accounts            → รายชื่อพนักงาน + สถานะบัญชี (ไม่คืน pin)
+    // PUT  /api/auth?action=accounts            → ตั้ง/แก้บัญชีของพนักงานหนึ่งคน
+    //   body: { employeeId, login_username?, pin?, role?, allowed_menus?, account_active? }
+    // ═══════════════════════════════════════
+    if (action === 'accounts') {
+      const authUser = authenticate(req);
+      if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+      if (!requireAdmin(authUser)) return res.status(403).json({ error: 'Forbidden: Admin access required' });
+
+      if (req.method === 'GET') {
+        const result = await db.execute(
+          `SELECT id, name, position, is_active, login_username, account_name, role, allowed_menus, account_active,
+                  (CASE WHEN pin_hash IS NOT NULL AND pin_hash != '' THEN 1 ELSE 0 END) AS has_pin
+           FROM employees ORDER BY is_active DESC, name`
+        );
+        const data = result.rows.map(r => ({
+          ...r,
+          allowed_menus: JSON.parse(r.allowed_menus || '[]'),
+          has_account: !!(r.login_username && r.login_username !== ''),
+        }));
+        return res.status(200).json({ data });
+      }
+
+      if (req.method === 'PUT') {
+        const { employeeId, login_username, pin, role, allowed_menus, account_active } = req.body || {};
+        if (!employeeId) return res.status(400).json({ error: 'ต้องระบุ employeeId' });
+
+        const empRes = await db.execute({ sql: 'SELECT * FROM employees WHERE id = ?', args: [employeeId] });
+        if (empRes.rows.length === 0) return res.status(404).json({ error: 'ไม่พบพนักงาน' });
+        const emp = empRes.rows[0];
+
+        const sets = [];
+        const args = [];
+
+        if (login_username !== undefined) {
+          const uname = String(login_username).trim();
+          if (uname !== '') {
+            // กันชื่อล็อกอินซ้ำกับพนักงานคนอื่น
+            const dup = await db.execute({
+              sql: 'SELECT id FROM employees WHERE login_username = ? AND id != ?',
+              args: [uname, employeeId],
+            });
+            if (dup.rows.length > 0) return res.status(400).json({ error: 'ชื่อผู้ใช้นี้ถูกใช้แล้ว' });
+          }
+          sets.push('login_username = ?'); args.push(uname);
+          // ตั้ง account_name อัตโนมัติถ้ายังว่าง (เพื่อใช้เป็น recorded_by)
+          if ((!emp.account_name || emp.account_name === '') && uname !== '') {
+            sets.push('account_name = ?'); args.push(uname);
+          }
+        }
+        if (pin !== undefined && pin !== '') { sets.push('pin_hash = ?'); args.push(hashPin(pin)); }
+        if (role !== undefined) { sets.push('role = ?'); args.push(role || 'employee'); }
+        if (allowed_menus !== undefined) { sets.push('allowed_menus = ?'); args.push(JSON.stringify(allowed_menus || [])); }
+        if (account_active !== undefined) { sets.push('account_active = ?'); args.push(account_active ? 1 : 0); }
+
+        if (sets.length === 0) return res.status(400).json({ error: 'ไม่มีข้อมูลให้แก้ไข' });
+
+        sets.push('updated_at = ?'); args.push(new Date().toISOString());
+        args.push(employeeId);
+        await db.execute({ sql: `UPDATE employees SET ${sets.join(', ')} WHERE id = ?`, args });
+        return res.status(200).json({ success: true });
+      }
+
+      return res.status(405).json({ error: 'Method not allowed' });
     }
 
     // ═══════════════════════════════════════
@@ -214,6 +287,31 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'กรุณากรอกรหัสพนักงานและ PIN' });
       }
 
+      const pinHash = hashPin(pin);
+
+      // 1) แหล่งหลักใหม่: ตาราง employees ที่มีบัญชีล็อกอิน (account_active = 1)
+      //    account_name ถูกใช้เป็น recorded_by/JWT name เพื่อให้ประวัติ+คอมไม่เปลี่ยน
+      const empRes = await db.execute({
+        sql: 'SELECT * FROM employees WHERE login_username = ? AND account_active = 1',
+        args: [employee_id]
+      });
+
+      if (empRes.rows.length > 0) {
+        const emp = empRes.rows[0];
+        if (emp.pin_hash !== pinHash) {
+          return res.status(401).json({ error: 'PIN ไม่ถูกต้อง' });
+        }
+        const payload = {
+          userId: emp.id,
+          employeeId: emp.login_username,
+          name: emp.account_name || emp.name,
+          role: emp.role || 'employee',
+          allowedMenus: JSON.parse(emp.allowed_menus || '[]')
+        };
+        return res.status(200).json({ success: true, token: signToken(payload), user: payload });
+      }
+
+      // 2) Fallback (กันล็อกเอาต์): ตาราง users เดิม
       const result = await db.execute({
         sql: 'SELECT * FROM users WHERE employee_id = ? AND is_active = 1',
         args: [employee_id]
@@ -224,7 +322,6 @@ export default async function handler(req, res) {
       }
 
       const user = result.rows[0];
-      const pinHash = hashPin(pin);
 
       if (user.pin_hash !== pinHash) {
         return res.status(401).json({ error: 'PIN ไม่ถูกต้อง' });

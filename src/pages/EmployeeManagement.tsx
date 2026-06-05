@@ -20,6 +20,8 @@ import { useEmployees } from "@/hooks/use-employees";
 import { useUsers } from "@/hooks/use-users";
 import { useSettings } from "@/hooks/use-settings";
 import { useCommissionReports } from "@/hooks/use-commission-reports";
+import { useAuth } from "@/hooks/use-auth";
+import { EmployeeAccounts } from "@/components/employees/employee-accounts";
 import {
   Plus,
   Users,
@@ -59,6 +61,7 @@ export function EmployeeManagement() {
   const { settings, refetch: refetchSettings } = useSettings();
   // รายชื่อ user account (active) — ใช้เป็นตัวเลือก "ผู้บันทึก" สำหรับคิดคอมเฉพาะคน
   const { users } = useUsers();
+  const { isAdmin } = useAuth();
 
   // State สำหรับเลือกเดือนในรายงานคอมมิชชั่น
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
@@ -798,6 +801,7 @@ export function EmployeeManagement() {
         <TabsList>
           <TabsTrigger value="employees">รายชื่อพนักงาน</TabsTrigger>
           <TabsTrigger value="commission">รายงานคอมมิชชั่น</TabsTrigger>
+          {isAdmin && <TabsTrigger value="accounts">บัญชีผู้ใช้</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="employees" className="space-y-4">
@@ -1188,6 +1192,12 @@ export function EmployeeManagement() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="accounts" className="space-y-4">
+            <EmployeeAccounts />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

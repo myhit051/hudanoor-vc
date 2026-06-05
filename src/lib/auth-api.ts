@@ -87,3 +87,47 @@ export async function deleteUser(id: string): Promise<void> {
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Failed to delete user');
 }
+
+// ─── บัญชีล็อกอินที่ผูกกับพนักงาน (ตาราง employees) ───
+export interface EmployeeAccount {
+  id: string;              // employees.id
+  name: string;            // ชื่อพนักงาน (ภาษาไทย)
+  position: string;
+  is_active: number;       // สถานะการเป็นพนักงาน
+  login_username: string;  // ชื่อผู้ใช้ล็อกอิน (ว่าง = ยังไม่มีบัญชี)
+  account_name: string;    // ชื่อที่ใช้เป็น recorded_by
+  role: string;
+  allowed_menus: string[];
+  account_active: number;  // เปิด/ปิดการล็อกอิน
+  has_pin: number;
+  has_account: boolean;
+}
+
+export interface EmployeeAccountUpdate {
+  employeeId: string;
+  login_username?: string;
+  pin?: string;
+  role?: string;
+  allowed_menus?: string[];
+  account_active?: number;
+}
+
+export async function getEmployeeAccounts(): Promise<EmployeeAccount[]> {
+  const res = await fetch(`${API_URL}/api/auth?action=accounts`, {
+    method: 'GET',
+    headers: getHeaders()
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to fetch accounts');
+  return data.data;
+}
+
+export async function updateEmployeeAccount(payload: EmployeeAccountUpdate): Promise<void> {
+  const res = await fetch(`${API_URL}/api/auth?action=accounts`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to update account');
+}
