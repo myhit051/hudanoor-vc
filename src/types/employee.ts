@@ -2,6 +2,9 @@ export interface BranchCommission {
   channel: 'store' | 'online';
   branchOrPlatform: string;
   commissionRate: number;
+  // รายชื่อ user account (ผู้บันทึก/recorded_by) ที่จะคิดคอมจากยอดขายของคนเหล่านั้นเท่านั้น
+  // ว่าง/ไม่ระบุ = คิดจากยอดรวมทุกคนในช่องทาง/สาขานั้น (พฤติกรรมเดิม)
+  salespersonNames?: string[];
 }
 
 export interface SecondaryBranch {
