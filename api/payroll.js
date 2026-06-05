@@ -93,17 +93,29 @@ function rowToItem(row) {
   };
 }
 
+// Build a normalized Set of salesperson (recorded_by) names for a commission
+// row. Returns null when no specific salesperson is set → match ALL recorders.
+function salespersonMatcher(commission) {
+  const names = Array.isArray(commission.salespersonNames) ? commission.salespersonNames : [];
+  const normalized = names.map(normName).filter((n) => n !== '');
+  if (normalized.length === 0) return null;
+  return new Set(normalized);
+}
+
 // Calculate commission breakdown for an employee given the income rows.
 // If commission.branchOrPlatform is empty → match ALL sales in that channel
 // (i.e. employee earns commission across every branch/platform of that channel).
+// If commission.salespersonNames is set → only count sales recorded by those users.
 function calcEmployeeCommission(employee, incomes) {
   const breakdown = (employee.branchCommissions || []).map((commission) => {
     const wantsAllInChannel = !commission.branchOrPlatform || commission.branchOrPlatform.trim() === '';
     const targetChannel = normName(commission.channel);
     const targetBranch = normName(commission.branchOrPlatform);
+    const salespeople = salespersonMatcher(commission);
     const salesForBranch = incomes
       .filter((income) => {
         if (normName(income.channel) !== targetChannel) return false;
+        if (salespeople && !salespeople.has(normName(income.recordedBy))) return false;
         if (wantsAllInChannel) return true;
         return normName(income.branchOrPlatform) === targetBranch;
       })
@@ -129,9 +141,9 @@ async function loadIncomesForPeriod(period) {
   const db = getTursoClient();
   const result = await db.execute({
     sql: `
-      SELECT id, date, channel, branch_or_platform, total_amount, 'sales' AS source FROM sales_orders WHERE date LIKE ?
+      SELECT id, date, channel, branch_or_platform, total_amount, recorded_by, 'sales' AS source FROM sales_orders WHERE date LIKE ?
       UNION ALL
-      SELECT id, date, channel, branch_or_platform, total_amount, 'legacy' AS source FROM legacy_sales WHERE date LIKE ?
+      SELECT id, date, channel, branch_or_platform, total_amount, recorded_by, 'legacy' AS source FROM legacy_sales WHERE date LIKE ?
     `,
     args: [`${period}-%`, `${period}-%`],
   });
@@ -141,6 +153,7 @@ async function loadIncomesForPeriod(period) {
     channel: row.channel || 'store',
     branchOrPlatform: row.branch_or_platform || '',
     totalAmount: Number(row.total_amount) || 0,
+    recordedBy: row.recorded_by || '',
     source: row.source,
   }));
 }
@@ -216,9 +229,11 @@ export default async function handler(req, res) {
             const wantsAllInChannel = !commission.branchOrPlatform || commission.branchOrPlatform.trim() === '';
             const targetChannel = normName(commission.channel);
             const targetBranch = normName(commission.branchOrPlatform);
+            const salespeople = salespersonMatcher(commission);
             const salesForBranch = incomes
               .filter((income) => {
                 if (normName(income.channel) !== targetChannel) return false;
+                if (salespeople && !salespeople.has(normName(income.recordedBy))) return false;
                 if (wantsAllInChannel) return true;
                 return normName(income.branchOrPlatform) === targetBranch;
               })

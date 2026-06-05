@@ -10,12 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Employee, EmployeeCommissionReport, BranchCommission, SecondaryBranch } from "@/types/employee";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useEmployees } from "@/hooks/use-employees";
+import { useUsers } from "@/hooks/use-users";
 import { useSettings } from "@/hooks/use-settings";
 import { useCommissionReports } from "@/hooks/use-commission-reports";
 import {
@@ -32,7 +34,8 @@ import {
   Globe,
   Loader2,
   AlertCircle,
-  Calendar
+  Calendar,
+  UserCheck
 } from "lucide-react";
 
 
@@ -54,7 +57,9 @@ export function EmployeeManagement() {
   } = useEmployees();
 
   const { settings, refetch: refetchSettings } = useSettings();
-  
+  // รายชื่อ user account (active) — ใช้เป็นตัวเลือก "ผู้บันทึก" สำหรับคิดคอมเฉพาะคน
+  const { users } = useUsers();
+
   // State สำหรับเลือกเดือนในรายงานคอมมิชชั่น
   const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
     // Default เป็นเดือนปัจจุบัน
@@ -164,7 +169,16 @@ export function EmployeeManagement() {
     setFormData({ ...formData, branchCommissions: newCommissions });
   };
 
-  const updateBranchCommission = (index: number, field: keyof BranchCommission, value: string | number) => {
+  // สลับเลือก/ไม่เลือก user คนหนึ่งในรายชื่อผู้บันทึกของแถวค่าคอม
+  const toggleCommissionSalesperson = (index: number, name: string) => {
+    const current = formData.branchCommissions[index]?.salespersonNames || [];
+    const next = current.includes(name)
+      ? current.filter((n) => n !== name)
+      : [...current, name];
+    updateBranchCommission(index, 'salespersonNames', next);
+  };
+
+  const updateBranchCommission = (index: number, field: keyof BranchCommission, value: string | number | string[]) => {
     const newCommissions = [...formData.branchCommissions];
     newCommissions[index] = { ...newCommissions[index], [field]: value };
 
@@ -579,6 +593,74 @@ export function EmployeeManagement() {
                               </Button>
                             </div>
                           </div>
+
+                          {/* ผู้บันทึกที่คิดคอม (recorded_by) — ว่าง = ทุกคน */}
+                          {(() => {
+                            const selected = commission.salespersonNames || [];
+                            const summary = selected.length === 0
+                              ? 'ทุกคน (ยอดรวมทั้งสาขา)'
+                              : `เฉพาะ ${selected.length} คน: ${selected.join(', ')}`;
+                            return (
+                              <div className="mt-2 pt-2 border-t border-amber-200/60 dark:border-amber-700/40 space-y-1">
+                                <Label className="text-[11px] font-medium text-muted-foreground inline-flex items-center gap-1">
+                                  <UserCheck className="h-3.5 w-3.5 text-amber-500" />
+                                  คิดคอมจากยอดของผู้บันทึก
+                                </Label>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-full h-9 justify-between text-sm font-normal"
+                                    >
+                                      <span className={selected.length === 0 ? 'text-muted-foreground' : ''}>
+                                        {summary}
+                                      </span>
+                                      <Users className="h-3.5 w-3.5 opacity-50 shrink-0" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-72 p-2" align="start">
+                                    <div className="flex items-center justify-between px-1 pb-2 mb-1 border-b">
+                                      <span className="text-xs font-medium text-muted-foreground">เลือกผู้ใช้ (เลือกได้หลายคน)</span>
+                                      {selected.length > 0 && (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 px-2 text-[11px] text-muted-foreground"
+                                          onClick={() => updateBranchCommission(index, 'salespersonNames', [])}
+                                        >
+                                          ล้าง (ทุกคน)
+                                        </Button>
+                                      )}
+                                    </div>
+                                    <div className="max-h-56 overflow-y-auto space-y-0.5">
+                                      {users.length === 0 ? (
+                                        <p className="text-xs text-muted-foreground px-2 py-3 text-center">ไม่มีบัญชีผู้ใช้</p>
+                                      ) : (
+                                        users.map((u) => (
+                                          <label
+                                            key={u.id}
+                                            className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent cursor-pointer text-sm"
+                                          >
+                                            <Checkbox
+                                              checked={selected.includes(u.name)}
+                                              onCheckedChange={() => toggleCommissionSalesperson(index, u.name)}
+                                            />
+                                            <span className="truncate">{u.name}</span>
+                                          </label>
+                                        ))
+                                      )}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                                <p className="text-[10px] text-muted-foreground">
+                                  ว่าง = คิดจากยอดขายของทุกคนในช่องทาง/สาขานี้
+                                </p>
+                              </div>
+                            );
+                          })()}
                         </div>
                       );
                     })}
