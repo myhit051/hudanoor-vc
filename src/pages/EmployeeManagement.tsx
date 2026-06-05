@@ -37,7 +37,11 @@ import {
   Loader2,
   AlertCircle,
   Calendar,
-  UserCheck
+  UserCheck,
+  Search,
+  Lightbulb,
+  Star,
+  Briefcase
 } from "lucide-react";
 
 
@@ -82,6 +86,8 @@ export function EmployeeManagement() {
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [formData, setFormData] = useState({
     name: "",
     position: "",
@@ -203,6 +209,19 @@ export function EmployeeManagement() {
 
   const activeEmployees = employees.filter(emp => emp.isActive);
   const totalSalary = activeEmployees.reduce((sum, emp) => sum + emp.salary, 0);
+
+  // กรอง + ค้นหา รายชื่อพนักงาน
+  const filteredEmployees = employees.filter((emp) => {
+    const matchStatus =
+      statusFilter === "all" ? true : statusFilter === "active" ? emp.isActive : !emp.isActive;
+    const q = search.trim().toLowerCase();
+    const matchSearch =
+      q === "" ||
+      emp.name.toLowerCase().includes(q) ||
+      (emp.position || "").toLowerCase().includes(q) ||
+      (emp.homeBranch || "").toLowerCase().includes(q);
+    return matchStatus && matchSearch;
+  });
 
   // สร้างรายการเดือนสำหรับ dropdown (12 เดือนย้อนหลัง)
   const generateMonthOptions = () => {
@@ -504,8 +523,9 @@ export function EmployeeManagement() {
                   </Button>
                 </div>
 
-                <div className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-2.5">
-                  💡 <strong>เคล็ดลับ:</strong> ถ้าเลือก "<strong>ทุกสาขา</strong>" → พนักงานจะได้คอมจากทุกยอดขายในช่องทางนั้น
+                <div className="flex items-start gap-2 text-xs text-muted-foreground bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg p-2.5">
+                  <Lightbulb className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                  <span><strong>เคล็ดลับ:</strong> ถ้าเลือก "<strong>ทุกสาขา</strong>" → พนักงานจะได้คอมจากทุกยอดขายในช่องทางนั้น</span>
                 </div>
 
                 {formData.branchCommissions.length === 0 ? (
@@ -556,7 +576,7 @@ export function EmployeeManagement() {
                                 <SelectContent>
                                   <SelectItem value="__all__">
                                     <span className="inline-flex items-center gap-2 font-medium text-rose-600">
-                                      ⭐ ทุก{commission.channel === 'store' ? 'สาขา' : 'แพลตฟอร์ม'}
+                                      <Star className="h-3.5 w-3.5" /> ทุก{commission.channel === 'store' ? 'สาขา' : 'แพลตฟอร์ม'}
                                     </span>
                                   </SelectItem>
                                   {validBranches.map((branch: string) => (
@@ -749,49 +769,45 @@ export function EmployeeManagement() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">พนักงานทั้งหมด</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{employees.length}</div>
-            <p className="text-xs text-muted-foreground">
-              ทำงานอยู่ {activeEmployees.length} คน
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">เงินเดือนรวม</CardTitle>
-            <Calculator className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalSalary)}</div>
-            <p className="text-xs text-muted-foreground">
-              ต่อเดือน (พนักงานที่ทำงานอยู่)
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">คอมมิชชั่นเดือนนี้</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {isLoadingCommissions ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : (
-                formatCurrency(totalCommissions || 0)
-              )}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="shadow-sm">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-900/20">
+              <Users className="h-5 w-5" />
             </div>
-            <p className="text-xs text-muted-foreground">
-              {reportPeriod ? `เดือน ${reportPeriod}` : 'เดือนปัจจุบัน'}
-            </p>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">พนักงานทั้งหมด</p>
+              <p className="text-2xl font-bold tabular-nums leading-tight">{employees.length}</p>
+              <p className="text-xs text-muted-foreground">ทำงานอยู่ {activeEmployees.length} คน</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20">
+              <Calculator className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">เงินเดือนรวม / เดือน</p>
+              <p className="text-2xl font-bold tabular-nums leading-tight truncate">{formatCurrency(totalSalary)}</p>
+              <p className="text-xs text-muted-foreground">เฉพาะพนักงานที่ทำงานอยู่</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardContent className="flex items-center gap-4 p-5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-900/20">
+              <TrendingUp className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">คอมมิชชั่นเดือนนี้</p>
+              <p className="text-2xl font-bold tabular-nums leading-tight truncate">
+                {isLoadingCommissions ? <Loader2 className="h-6 w-6 animate-spin" /> : formatCurrency(totalCommissions || 0)}
+              </p>
+              <p className="text-xs text-muted-foreground">{reportPeriod ? `เดือน ${reportPeriod}` : 'เดือนปัจจุบัน'}</p>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -805,191 +821,199 @@ export function EmployeeManagement() {
         </TabsList>
 
         <TabsContent value="employees" className="space-y-4">
-          <div className="grid gap-6">
-            {employees.map((employee) => (
-              <Card key={employee.id} className="overflow-hidden border-0 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-r from-white via-gray-50 to-white dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-                <CardHeader className="pb-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="relative">
-                        <div className="w-16 h-16 bg-gradient-to-br from-rose-500 via-pink-500 to-purple-500 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg">
-                          {employee.name.charAt(0)}
-                        </div>
-                        {employee.isActive && (
-                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white"></div>
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-1">
-                          <CardTitle className="text-xl font-bold text-gray-900 dark:text-white">
-                            {employee.name}
-                          </CardTitle>
-                          {!employee.isActive && (
-                            <Badge variant="secondary" className="bg-gray-100 text-gray-600">
-                              ไม่ทำงานแล้ว
-                            </Badge>
-                          )}
-                        </div>
-                        <CardDescription className="text-base font-medium text-gray-600 dark:text-gray-300 mb-2">
-                          {employee.position}
-                        </CardDescription>
-                        <div className="flex flex-wrap gap-2 items-center text-sm text-gray-500 dark:text-gray-400">
-                          <span>เริ่มงาน: {formatDate(employee.startDate)}</span>
-                          {employee.homeBranch && (
-                            <Badge variant="outline" className="border-rose-300 text-rose-600 bg-rose-50 dark:bg-rose-900/20">
-                              <MapPin className="h-3 w-3 mr-1" /> {employee.homeBranch}
-                            </Badge>
-                          )}
-                          {Array.isArray(employee.secondaryBranches) && employee.secondaryBranches.length > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              + {employee.secondaryBranches.length} สาขารอง
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(employee)}
-                        className="hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(employee.id)}
-                        disabled={isDeletingEmployee}
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900"
-                      >
-                        {isDeletingEmployee ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="pt-0">
-                  {/* Salary and Commission Highlight Section */}
-                  <div className="space-y-4 mb-6">
-                    {/* Salary Card */}
-                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 border border-green-200 dark:border-green-700">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
-                          <Calculator className="h-5 w-5 text-white" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-green-700 dark:text-green-300">เงินเดือน</div>
-                          <div className="text-2xl font-bold text-green-800 dark:text-green-200">
-                            {formatCurrency(employee.salary)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Branch Commissions Section */}
-                    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-700">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
-                          <Store className="h-5 w-5 text-white" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-blue-700 dark:text-blue-300">ค่าคอมตามสาขา/แพลตฟอร์ม</div>
-                          <div className="text-xs text-blue-600 dark:text-blue-400">
-                            {Array.isArray(employee.branchCommissions) ? employee.branchCommissions.length : 0} สาขา/แพลตฟอร์ม
-                          </div>
-                        </div>
-                      </div>
-
-                      {Array.isArray(employee.branchCommissions) && employee.branchCommissions.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {employee.branchCommissions.map((commission, index) => (
-                            <div key={index} className="bg-white/50 dark:bg-gray-800/50 rounded-lg p-3 border border-blue-100 dark:border-blue-800">
-                              <div className="flex items-center gap-1 mb-1">
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
-                                  {commission.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}
-                                </span>
-                              </div>
-                              <div className="text-sm font-medium text-blue-800 dark:text-blue-200 truncate">
-                                {commission.branchOrPlatform || 'ไม่ระบุ'}
-                              </div>
-                              <div className="text-lg font-bold text-blue-900 dark:text-blue-100">
-                                {commission.commissionRate || 0}%
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-2 text-blue-600 dark:text-blue-400 text-sm">
-                          ยังไม่มีการตั้งค่าคอมมิชชั่น
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Contact Information */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    {employee.phone && (
-                      <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <Phone className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm font-medium">{employee.phone}</span>
-                      </div>
-                    )}
-                    {employee.email && (
-                      <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                        <Mail className="h-4 w-4 text-gray-500" />
-                        <span className="text-sm font-medium">{employee.email}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Address */}
-                  {employee.address && (
-                    <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg mb-4">
-                      <MapPin className="h-4 w-4 text-gray-500 mt-0.5" />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">{employee.address}</span>
-                    </div>
-                  )}
-
-                  {/* Note */}
-                  {employee.note && (
-                    <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg">
-                      <div className="flex items-start gap-2">
-                        <div className="w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-white text-xs font-bold">!</span>
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-1">หมายเหตุ</div>
-                          <div className="text-sm text-amber-700 dark:text-amber-300">{employee.note}</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+          {/* Toolbar: ค้นหา + กรองสถานะ */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="ค้นหาชื่อ ตำแหน่ง หรือสาขา"
+                className="pl-9"
+              />
+            </div>
+            <div className="flex items-center gap-1 rounded-lg border bg-muted/40 p-1 self-start">
+              {([
+                { key: "all", label: "ทั้งหมด" },
+                { key: "active", label: "ทำงานอยู่" },
+                { key: "inactive", label: "พักงาน" },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setStatusFilter(opt.key)}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    statusFilter === opt.key
+                      ? "bg-background text-rose-600 shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {employees.length === 0 && (
+          {employees.length === 0 ? (
             <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Users className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">ยังไม่มีข้อมูลพนักงาน</h3>
-                <p className="text-muted-foreground text-center mb-4">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-500 mb-4">
+                  <Users className="h-7 w-7" />
+                </div>
+                <h3 className="text-lg font-semibold mb-1">ยังไม่มีข้อมูลพนักงาน</h3>
+                <p className="text-muted-foreground text-center mb-4 text-sm">
                   เริ่มต้นเพิ่มข้อมูลพนักงานและตั้งค่าเงินเดือน
                 </p>
-                <Button onClick={() => setIsAddDialogOpen(true)}>
+                <Button onClick={() => setIsAddDialogOpen(true)} className="bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600">
                   <Plus className="h-4 w-4 mr-2" />
                   เพิ่มพนักงานคนแรก
                 </Button>
               </CardContent>
             </Card>
+          ) : filteredEmployees.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <Search className="h-8 w-8 text-muted-foreground/50 mb-3" />
+                <p className="text-sm text-muted-foreground">ไม่พบพนักงานที่ตรงกับการค้นหา</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {filteredEmployees.map((employee) => {
+                const commissions = Array.isArray(employee.branchCommissions) ? employee.branchCommissions : [];
+                return (
+                  <Card
+                    key={employee.id}
+                    className={`group relative overflow-hidden shadow-sm transition-all duration-200 hover:shadow-md hover:border-rose-200 dark:hover:border-rose-900/50 ${!employee.isActive ? "opacity-75" : ""}`}
+                  >
+                    <CardContent className="p-5">
+                      {/* Header */}
+                      <div className="flex items-start gap-3">
+                        <div className="relative shrink-0">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-pink-500 text-white font-semibold text-lg">
+                            {employee.name.charAt(0)}
+                          </div>
+                          {employee.isActive && (
+                            <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-background" />
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold text-base text-foreground truncate">{employee.name}</h3>
+                            {!employee.isActive && (
+                              <Badge variant="secondary" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 text-[10px]">พักงาน</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                            <Briefcase className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{employee.position || "—"}</span>
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1">
+                              <Calendar className="h-3 w-3" /> {formatDate(employee.startDate)}
+                            </span>
+                            {employee.homeBranch && (
+                              <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 font-medium">
+                                <MapPin className="h-3 w-3" /> {employee.homeBranch}
+                              </span>
+                            )}
+                            {Array.isArray(employee.secondaryBranches) && employee.secondaryBranches.length > 0 && (
+                              <span>+ {employee.secondaryBranches.length} สาขารอง</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-0.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost" size="icon"
+                            onClick={() => handleEdit(employee)}
+                            className="h-8 w-8 text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                            aria-label={`แก้ไข ${employee.name}`}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon"
+                            onClick={() => handleDelete(employee.id)}
+                            disabled={isDeletingEmployee}
+                            className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            aria-label={`ลบ ${employee.name}`}
+                          >
+                            {isDeletingEmployee ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Salary + commission count */}
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                          <p className="text-[11px] font-medium text-muted-foreground">เงินเดือน</p>
+                          <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(employee.salary)}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                          <p className="text-[11px] font-medium text-muted-foreground">ค่าคอม</p>
+                          <p className="text-lg font-bold tabular-nums">
+                            {commissions.length}
+                            <span className="text-xs font-normal text-muted-foreground"> สาขา/แพลตฟอร์ม</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Commission chips */}
+                      {commissions.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {commissions.map((c, i) => (
+                            <span
+                              key={i}
+                              className="inline-flex items-center gap-1 rounded-full border bg-background px-2.5 py-1 text-xs"
+                            >
+                              {c.channel === "store"
+                                ? <Store className="h-3 w-3 text-blue-500" />
+                                : <Globe className="h-3 w-3 text-purple-500" />}
+                              <span className="text-muted-foreground">{c.branchOrPlatform || "ทุกสาขา"}</span>
+                              <span className="font-semibold tabular-nums">{c.commissionRate || 0}%</span>
+                              {Array.isArray(c.salespersonNames) && c.salespersonNames.length > 0 && (
+                                <UserCheck className="h-3 w-3 text-amber-500" />
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Contact / note — compact */}
+                      {(employee.phone || employee.email || employee.address || employee.note) && (
+                        <div className="mt-3 pt-3 border-t space-y-1.5 text-sm">
+                          {employee.phone && (
+                            <p className="flex items-center gap-2 text-muted-foreground">
+                              <Phone className="h-3.5 w-3.5 shrink-0" /> <span className="text-foreground">{employee.phone}</span>
+                            </p>
+                          )}
+                          {employee.email && (
+                            <p className="flex items-center gap-2 text-muted-foreground">
+                              <Mail className="h-3.5 w-3.5 shrink-0" /> <span className="text-foreground truncate">{employee.email}</span>
+                            </p>
+                          )}
+                          {employee.address && (
+                            <p className="flex items-start gap-2 text-muted-foreground">
+                              <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" /> <span className="text-foreground">{employee.address}</span>
+                            </p>
+                          )}
+                          {employee.note && (
+                            <p className="flex items-start gap-2 text-amber-600 dark:text-amber-400">
+                              <Lightbulb className="h-3.5 w-3.5 shrink-0 mt-0.5" /> <span>{employee.note}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           )}
         </TabsContent>
 
@@ -1146,17 +1170,17 @@ export function EmployeeManagement() {
                       </TableHeader>
                       <TableBody>
                         {commissionReports.map((report) => (
-                          <TableRow key={`${report.employeeId}-${report.period}`}>
+                          <TableRow key={`${report.employeeId}-${report.period}`} className="hover:bg-muted/50 transition-colors">
                             <TableCell className="font-medium">{report.employeeName}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(report.storeSales)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(report.onlineSales)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(report.storeCommission)}</TableCell>
-                            <TableCell className="text-right">{formatCurrency(report.onlineCommission)}</TableCell>
-                            <TableCell className="text-right font-semibold text-green-600">
+                            <TableCell className="text-right tabular-nums">{formatCurrency(report.storeSales)}</TableCell>
+                            <TableCell className="text-right tabular-nums">{formatCurrency(report.onlineSales)}</TableCell>
+                            <TableCell className="text-right tabular-nums">{formatCurrency(report.storeCommission)}</TableCell>
+                            <TableCell className="text-right tabular-nums">{formatCurrency(report.onlineCommission)}</TableCell>
+                            <TableCell className="text-right font-semibold text-green-600 tabular-nums">
                               {formatCurrency(report.totalCommission)}
                             </TableCell>
-                            <TableCell className="text-right">{formatCurrency(report.salary)}</TableCell>
-                            <TableCell className="text-right font-bold text-blue-600">
+                            <TableCell className="text-right tabular-nums">{formatCurrency(report.salary)}</TableCell>
+                            <TableCell className="text-right font-bold text-blue-600 tabular-nums">
                               {formatCurrency(report.totalEarnings)}
                             </TableCell>
                           </TableRow>

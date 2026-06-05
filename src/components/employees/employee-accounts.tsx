@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { getEmployeeAccounts, updateEmployeeAccount, EmployeeAccount } from '@/lib/auth-api';
-import { KeyRound, Loader2, ShieldCheck, UserPlus } from 'lucide-react';
+import { KeyRound, Loader2, ShieldCheck, UserPlus, Search, CircleUser, CircleSlash } from 'lucide-react';
 
 const MENU_OPTIONS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -42,6 +42,7 @@ export function EmployeeAccounts() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [edit, setEdit] = useState<EditState | null>(null);
+  const [search, setSearch] = useState('');
 
   const fetchAccounts = async () => {
     try {
@@ -117,18 +118,51 @@ export function EmployeeAccounts() {
     );
   }
 
+  const withAccount = accounts.filter(a => a.has_account).length;
+  const withoutAccount = accounts.length - withAccount;
+  const q = search.trim().toLowerCase();
+  const filtered = accounts.filter(a =>
+    q === '' ||
+    a.name.toLowerCase().includes(q) ||
+    (a.login_username || '').toLowerCase().includes(q) ||
+    (a.position || '').toLowerCase().includes(q)
+  );
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-3">
-        <ShieldCheck className="h-4 w-4 text-purple-600 shrink-0" />
-        จัดการบัญชีล็อกอินของพนักงานแต่ละคน — พนักงานที่ยังไม่มีบัญชีจะแสดงเป็น "ยังไม่มีบัญชี" ตั้งให้ภายหลังได้
+      <div className="flex items-start gap-2 text-sm text-muted-foreground bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-3">
+        <ShieldCheck className="h-4 w-4 text-purple-600 shrink-0 mt-0.5" />
+        <span>จัดการบัญชีล็อกอินของพนักงานแต่ละคน — พนักงานที่ยังไม่มีบัญชีจะแสดงเป็น "ยังไม่มีบัญชี" ตั้งให้ภายหลังได้</span>
+      </div>
+
+      {/* Toolbar: สรุป + ค้นหา */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4 text-sm">
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <CircleUser className="h-4 w-4 text-emerald-500" />
+            มีบัญชี <strong className="text-foreground tabular-nums">{withAccount}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <CircleSlash className="h-4 w-4 text-gray-400" />
+            ยังไม่มี <strong className="text-foreground tabular-nums">{withoutAccount}</strong>
+          </span>
+        </div>
+        <div className="relative w-full sm:max-w-xs">
+          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="ค้นหาชื่อ หรือชื่อผู้ใช้"
+            className="pl-9"
+          />
+        </div>
       </div>
 
       <Card>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-800 text-left text-xs uppercase text-gray-500">
+              <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 font-medium">พนักงาน</th>
                   <th className="px-4 py-3 font-medium">ชื่อผู้ใช้ (ล็อกอิน)</th>
@@ -137,9 +171,16 @@ export function EmployeeAccounts() {
                   <th className="px-4 py-3 font-medium text-right">จัดการ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {accounts.map(a => (
-                  <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+              <tbody className="divide-y divide-border">
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      ไม่พบพนักงานที่ตรงกับการค้นหา
+                    </td>
+                  </tr>
+                )}
+                {filtered.map(a => (
+                  <tr key={a.id} className="hover:bg-muted/40 transition-colors">
                     <td className="px-4 py-3">
                       <div className="font-medium">{a.name}</div>
                       <div className="text-xs text-muted-foreground">{a.position || '—'}{a.is_active ? '' : ' · พักงาน'}</div>
