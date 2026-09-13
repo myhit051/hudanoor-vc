@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useSales } from '@/hooks/use-sales';
 import { useUsers } from '@/hooks/use-users';
 import { groupSalesByOrder } from '@/lib/sales-api';
-import { Search, History, Trash2, Loader2, PackageCheck, TrendingUp, ShoppingCart, Package, Store, Globe2 } from 'lucide-react';
+import { Search, History, Trash2, Loader2, PackageCheck, TrendingUp, ShoppingCart, Package, Store, Globe2, DollarSign, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -135,6 +135,7 @@ export function OrderHistory() {
   const summary = useMemo(() => {
     let totalAmount = 0;
     let totalItems = 0;
+    let totalCost = 0;
     const channelTotals = {
       store: {
         totalAmount: 0,
@@ -153,8 +154,15 @@ export function OrderHistory() {
       const orderQuantity = Number(order.total_quantity) || 0;
       const channelKey = order.channel === 'online' ? 'online' : 'store';
 
+      // Sum cost from individual items
+      const orderCost = order.items.reduce((sum, item) => {
+        const cp = Number(item.cost_price) || 0;
+        return sum + cp * Number(item.quantity);
+      }, 0);
+
       totalAmount += orderAmount;
       totalItems += orderQuantity;
+      totalCost += orderCost;
       channelTotals[channelKey].totalAmount += orderAmount;
       channelTotals[channelKey].totalOrders += 1;
       channelTotals[channelKey].totalItems += orderQuantity;
@@ -164,6 +172,8 @@ export function OrderHistory() {
       totalAmount,
       totalOrders: groupedOrders.length,
       totalItems,
+      totalCost,
+      totalProfit: totalAmount - totalCost,
       channelTotals
     };
   }, [groupedOrders]);
@@ -210,7 +220,7 @@ export function OrderHistory() {
       </div>
 
       {/* KPI Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card className="bg-white dark:bg-gray-800 shadow-sm border border-rose-100 dark:border-rose-900/30">
           <CardContent className="p-4 sm:p-6 flex items-center gap-4">
             <div className="h-12 w-12 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center shrink-0">
@@ -221,6 +231,39 @@ export function OrderHistory() {
               <h3 className="text-2xl font-bold text-rose-600 dark:text-rose-400">
                 ฿{summary.totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-orange-100 dark:border-orange-900/30">
+          <CardContent className="p-4 sm:p-6 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0">
+              <TrendingDown className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-1">ต้นทุนรวม</p>
+              <h3 className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                ฿{summary.totalCost.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+              </h3>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-emerald-100 dark:border-emerald-900/30">
+          <CardContent className="p-4 sm:p-6 flex items-center gap-4">
+            <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+              <DollarSign className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground mb-1">กำไรรวม</p>
+              <h3 className={cn("text-2xl font-bold", summary.totalProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+                ฿{summary.totalProfit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+              </h3>
+              {summary.totalAmount > 0 && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  มาร์จิ้น {((summary.totalProfit / summary.totalAmount) * 100).toFixed(1)}%
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -239,10 +282,10 @@ export function OrderHistory() {
           </CardContent>
         </Card>
 
-        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-emerald-100 dark:border-emerald-900/30">
+        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-violet-100 dark:border-violet-900/30">
           <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
-              <Package className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            <div className="h-12 w-12 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
+              <Package className="h-6 w-6 text-violet-600 dark:text-violet-400" />
             </div>
             <div>
               <p className="text-sm font-medium text-muted-foreground mb-1">จำนวนสินค้าที่ขาย</p>
@@ -487,17 +530,44 @@ export function OrderHistory() {
                             <p className="text-sm font-semibold mt-0.5">
                               ฿{Number(item.total_amount).toLocaleString('th-TH')}
                             </p>
+                            {Number(item.cost_price) > 0 && (
+                              <div className="mt-1 pt-1 border-t border-dashed border-muted-foreground/20">
+                                <p className="text-[11px] text-orange-500">
+                                  ต้นทุน: ฿{Number(item.cost_price).toLocaleString('th-TH')} × {item.quantity} = ฿{(Number(item.cost_price) * Number(item.quantity)).toLocaleString('th-TH')}
+                                </p>
+                                <p className={cn("text-[11px] font-semibold", (Number(item.total_amount) - Number(item.cost_price) * Number(item.quantity)) >= 0 ? "text-emerald-600" : "text-red-500")}>
+                                  กำไร: ฿{(Number(item.total_amount) - Number(item.cost_price) * Number(item.quantity)).toLocaleString('th-TH')}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
                       
                       {/* Footer total & Action */}
-                      <div className="flex items-center justify-between px-4 py-3 bg-rose-50/80 dark:bg-rose-950/30 border-t border-muted/60">
-                        <span className="text-sm font-medium text-muted-foreground">ยอดรวมสุทธิ</span>
-                        <span className="text-sm font-bold text-rose-600">
-                          ฿{group.total_amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
+                      {(() => {
+                        const orderCost = group.items.reduce((sum, item) => sum + (Number(item.cost_price) || 0) * Number(item.quantity), 0);
+                        const orderProfit = group.total_amount - orderCost;
+                        return (
+                          <div className="px-4 py-3 bg-rose-50/80 dark:bg-rose-950/30 border-t border-muted/60">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-muted-foreground">ยอดรวมสุทธิ</span>
+                              <span className="text-sm font-bold text-rose-600">
+                                ฿{group.total_amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                            {orderCost > 0 && (
+                              <div className="flex items-center justify-between mt-1 gap-4">
+                                <span className="text-xs text-muted-foreground">ต้นทุน: ฿{orderCost.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                                <span className={cn("text-xs font-semibold", orderProfit >= 0 ? "text-emerald-600" : "text-red-500")}>
+                                  กำไร: ฿{orderProfit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                                  {group.total_amount > 0 && ` (${((orderProfit / group.total_amount) * 100).toFixed(1)}%)`}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       
                       {(() => {
                         const isSheetImport = group.is_legacy && group.import_source === 'sheet-import';

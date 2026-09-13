@@ -35,6 +35,7 @@ export interface SalesOrder {
   created_at: string;
   is_legacy?: number;
   import_source?: string;
+  cost_price?: number;
 }
 
 export interface OrderSummary {

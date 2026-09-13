@@ -19,20 +19,20 @@ export default async function handler(req, res) {
         include_legacy, limit = 5000, offset = 0,
       } = req.query;
 
-      let query = 'SELECT * FROM sales_orders WHERE 1=1';
+      let query = 'SELECT so.*, si.cost_price AS cost_price FROM sales_orders so LEFT JOIN stock_in si ON so.stock_in_id = si.id WHERE 1=1';
       const args = [];
 
-      if (date) { query += ' AND date = ?'; args.push(date); }
-      if (date_from) { query += ' AND date >= ?'; args.push(date_from); }
-      if (date_to) { query += ' AND date <= ?'; args.push(date_to); }
-      if (sku) { query += ' AND sku LIKE ?'; args.push(`%${sku}%`); }
-      if (channel) { query += ' AND channel = ?'; args.push(channel); }
+      if (date) { query += ' AND so.date = ?'; args.push(date); }
+      if (date_from) { query += ' AND so.date >= ?'; args.push(date_from); }
+      if (date_to) { query += ' AND so.date <= ?'; args.push(date_to); }
+      if (sku) { query += ' AND so.sku LIKE ?'; args.push(`%${sku}%`); }
+      if (channel) { query += ' AND so.channel = ?'; args.push(channel); }
 
-      query += ' ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?';
+      query += ' ORDER BY so.date DESC, so.created_at DESC LIMIT ? OFFSET ?';
       args.push(Number(limit), Number(offset));
 
       const result = await db.execute({ sql: query, args });
-      const rows = result.rows.map((r) => ({ ...r, is_legacy: 0 }));
+      const rows = result.rows.map((r) => ({ ...r, is_legacy: 0, cost_price: Number(r.cost_price) || 0 }));
 
       // Optionally merge legacy_sales (mapped to SalesOrder shape)
       if (include_legacy === 'true' || include_legacy === '1') {
@@ -75,6 +75,7 @@ export default async function handler(req, res) {
             created_at: r.imported_at,
             is_legacy: 1,
             import_source: r.import_source || 'sheet-import',
+            cost_price: 0,
           };
         });
         rows.push(...legacyMapped);
