@@ -219,16 +219,16 @@ export function OrderHistory() {
         <p className="text-muted-foreground mt-1">ดูรายการออเดอร์ย้อนหลัง ค้นหา และลบรายการ</p>
       </div>
 
-      {/* KPI Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* KPI Summary Cards — Money */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Card className="bg-white dark:bg-gray-800 shadow-sm border border-rose-100 dark:border-rose-900/30">
-          <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center shrink-0">
-              <TrendingUp className="h-6 w-6 text-rose-600 dark:text-rose-400" />
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center shrink-0">
+              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-rose-600 dark:text-rose-400" />
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-1">ยอดขายรวม</p>
-              <h3 className="text-2xl font-bold text-rose-600 dark:text-rose-400">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-0.5">ยอดขายรวม</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-rose-600 dark:text-rose-400 truncate">
                 ฿{summary.totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </h3>
             </div>
@@ -236,13 +236,13 @@ export function OrderHistory() {
         </Card>
 
         <Card className="bg-white dark:bg-gray-800 shadow-sm border border-orange-100 dark:border-orange-900/30">
-          <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0">
-              <TrendingDown className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0">
+              <TrendingDown className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400" />
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-1">ต้นทุนรวม</p>
-              <h3 className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-0.5">ต้นทุนรวม</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-orange-600 dark:text-orange-400 truncate">
                 ฿{summary.totalCost.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </h3>
             </div>
@@ -250,13 +250,13 @@ export function OrderHistory() {
         </Card>
 
         <Card className="bg-white dark:bg-gray-800 shadow-sm border border-emerald-100 dark:border-emerald-900/30">
-          <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
-              <DollarSign className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center shrink-0">
+              <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-1">กำไรรวม</p>
-              <h3 className={cn("text-2xl font-bold", summary.totalProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-0.5">กำไรรวม</p>
+              <h3 className={cn("text-xl sm:text-2xl font-bold truncate", summary.totalProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
                 ฿{summary.totalProfit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </h3>
               {summary.totalAmount > 0 && (
@@ -267,30 +267,33 @@ export function OrderHistory() {
             </div>
           </CardContent>
         </Card>
+      </div>
 
+      {/* KPI Summary Cards — Counts */}
+      <div className="grid grid-cols-2 gap-3">
         <Card className="bg-white dark:bg-gray-800 shadow-sm border border-blue-100 dark:border-blue-900/30">
-          <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
-              <ShoppingCart className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center shrink-0">
+              <ShoppingCart className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 dark:text-blue-400" />
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-1">จำนวนออเดอร์</p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {summary.totalOrders.toLocaleString('th-TH')} <span className="text-base font-normal text-muted-foreground">บิล</span>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-0.5">ออเดอร์</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {summary.totalOrders.toLocaleString('th-TH')} <span className="text-sm sm:text-base font-normal text-muted-foreground">บิล</span>
               </h3>
             </div>
           </CardContent>
         </Card>
 
         <Card className="bg-white dark:bg-gray-800 shadow-sm border border-violet-100 dark:border-violet-900/30">
-          <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-            <div className="h-12 w-12 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
-              <Package className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
+              <Package className="h-5 w-5 sm:h-6 sm:w-6 text-violet-600 dark:text-violet-400" />
             </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground mb-1">จำนวนสินค้าที่ขาย</p>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {summary.totalItems.toLocaleString('th-TH')} <span className="text-base font-normal text-muted-foreground">ชิ้น</span>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-0.5">สินค้าที่ขาย</p>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {summary.totalItems.toLocaleString('th-TH')} <span className="text-sm sm:text-base font-normal text-muted-foreground">ชิ้น</span>
               </h3>
             </div>
           </CardContent>
