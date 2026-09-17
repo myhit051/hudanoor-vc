@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
@@ -60,6 +61,11 @@ const LABEL_SIZES: Record<LabelSize, { label: string; pageMm: [number, number]; 
   'a4-8': { label: 'กระดาษ A4 (8 ใบ/หน้า)', pageMm: [210, 297], cols: 2, rows: 4, compact: true }
 };
 const MAX_COMPACT_ITEMS = 2;
+// ที่อยู่ร้านยาวเกินจะไปเบียดช่องที่อยู่ผู้รับในใบปะหน้าแบบย่อ — ตัดให้เหลือราว 2 บรรทัด
+const MAX_COMPACT_SENDER_ADDRESS = 110;
+
+const truncate = (text: string, max: number) =>
+  text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
 const MAX_LABEL_ITEMS = 6;
 
 interface Sender {
@@ -97,7 +103,7 @@ function CompactShippingLabel({ order, sender }: { order: OrderSummary; sender: 
             <span style={{ fontWeight: 700, fontSize: '10px' }}>{sender.name}</span>
             {sender.phone && <span> โทร {sender.phone}</span>}
           </div>
-          {sender.address && <div>{sender.address.replace(/\s*\n\s*/g, ' ')}</div>}
+          {sender.address && <div>{truncate(sender.address.replace(/\s*\n\s*/g, ' '), MAX_COMPACT_SENDER_ADDRESS)}</div>}
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0, fontSize: '8.5px' }}>
           <div style={{ fontSize: '9.5px', fontWeight: 700, border: '1.2px solid #000', padding: '1px 6px 3px', borderRadius: '3px', lineHeight: 1.6 }}>{order.order_id}</div>
@@ -175,6 +181,7 @@ export function Shipping() {
   const [dateFrom, setDateFrom] = useState(daysAgo(30));
   const [dateTo, setDateTo] = useState(toLocalDateStr(new Date()));
   const [search, setSearch] = useState('');
+  const [addressOnly, setAddressOnly] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [labelSize, setLabelSize] = useState<LabelSize>('sticker');
   const [printOrders, setPrintOrders] = useState<OrderSummary[]>([]);
@@ -193,7 +200,8 @@ export function Shipping() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['sales'] });
       toast({ title: 'อัปเดตสถานะแล้ว', description: `${vars.order_ids.length} ออเดอร์ → ${STATUS_META[vars.shipping_status].label}` });
-      setSelected([]);
+      // เอาเฉพาะออเดอร์ที่เพิ่งอัปเดตออกจากรายการที่เลือก ที่เลือกไว้อื่น ๆ ยังอยู่
+      setSelected(prev => prev.filter(id => !vars.order_ids.includes(id)));
     },
     onError: (error: Error) => {
       toast({ title: 'เกิดข้อผิดพลาด', description: error.message, variant: 'destructive' });
@@ -214,12 +222,13 @@ export function Shipping() {
 
   const searched = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return orders;
-    return orders.filter(o =>
+    const base = addressOnly ? orders.filter(o => o.shipping_address?.trim()) : orders;
+    if (!q) return base;
+    return base.filter(o =>
       [o.order_id, o.shipping_address, o.branch_or_platform, o.recorded_by, ...o.items.map(i => `${i.sku} ${i.product_name}`)]
         .join(' ').toLowerCase().includes(q)
     );
-  }, [orders, search]);
+  }, [orders, search, addressOnly]);
 
   const counts = useMemo(() => {
     const c: Record<ShippingStatus | 'all', number> = { all: searched.length, pending: 0, shipped: 0, returned: 0 };
@@ -348,6 +357,7 @@ export function Shipping() {
           </div>
 
           {/* แท็บสถานะ */}
+          <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap gap-2" role="tablist" aria-label="กรองตามสถานะจัดส่ง">
             {(['all', ...STATUS_KEYS] as const).map(key => {
               const active = statusFilter === key;
@@ -369,6 +379,11 @@ export function Shipping() {
                 </button>
               );
             })}
+          </div>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none md:ml-auto">
+            <Switch checked={addressOnly} onCheckedChange={setAddressOnly} className="min-h-0 min-w-0" />
+            เฉพาะออเดอร์ที่มีที่อยู่
+          </label>
           </div>
         </CardContent>
       </Card>
@@ -470,9 +485,9 @@ export function Shipping() {
                         <p className="whitespace-pre-line text-gray-700 dark:text-gray-300 line-clamp-3">{order.shipping_address}</p>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <AlertTriangle className="h-3.5 w-3.5" />
-                        ยังไม่มีที่อยู่จัดส่ง — พิมพ์ใบปะหน้าไม่ได้
+                        ไม่มีที่อยู่จัดส่ง (พิมพ์ใบปะหน้าไม่ได้)
                       </div>
                     )}
 

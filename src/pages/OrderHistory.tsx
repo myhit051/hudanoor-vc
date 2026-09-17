@@ -136,6 +136,7 @@ export function OrderHistory() {
     let totalAmount = 0;
     let totalItems = 0;
     let totalCost = 0;
+    let totalShipping = 0;
     const channelTotals = {
       store: {
         totalAmount: 0,
@@ -163,6 +164,7 @@ export function OrderHistory() {
       totalAmount += orderAmount;
       totalItems += orderQuantity;
       totalCost += orderCost;
+      totalShipping += order.shipping_fee;
       channelTotals[channelKey].totalAmount += orderAmount;
       channelTotals[channelKey].totalOrders += 1;
       channelTotals[channelKey].totalItems += orderQuantity;
@@ -173,7 +175,9 @@ export function OrderHistory() {
       totalOrders: groupedOrders.length,
       totalItems,
       totalCost,
-      totalProfit: totalAmount - totalCost,
+      // ค่าส่งเป็นรายรับที่ร้านต้องจ่ายต่อให้ขนส่ง จึงไม่นับเป็นกำไร
+      productAmount: totalAmount - totalShipping,
+      totalProfit: totalAmount - totalShipping - totalCost,
       channelTotals
     };
   }, [groupedOrders]);
@@ -259,9 +263,9 @@ export function OrderHistory() {
               <h3 className={cn("text-xl sm:text-2xl font-bold truncate", summary.totalProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
                 ฿{summary.totalProfit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </h3>
-              {summary.totalAmount > 0 && (
+              {summary.productAmount > 0 && (
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  มาร์จิ้น {((summary.totalProfit / summary.totalAmount) * 100).toFixed(1)}%
+                  มาร์จิ้น {((summary.totalProfit / summary.productAmount) * 100).toFixed(1)}%
                 </p>
               )}
             </div>
@@ -543,8 +547,8 @@ export function OrderHistory() {
                                 <p className="text-[11px] text-orange-500">
                                   ต้นทุน: ฿{Number(item.cost_price).toLocaleString('th-TH')} × {item.quantity} = ฿{(Number(item.cost_price) * Number(item.quantity)).toLocaleString('th-TH')}
                                 </p>
-                                <p className={cn("text-[11px] font-semibold", (Number(item.total_amount) - Number(item.cost_price) * Number(item.quantity)) >= 0 ? "text-emerald-600" : "text-red-500")}>
-                                  กำไร: ฿{(Number(item.total_amount) - Number(item.cost_price) * Number(item.quantity)).toLocaleString('th-TH')}
+                                <p className={cn("text-[11px] font-semibold", (Number(item.total_amount) - (Number(item.shipping_fee) || 0) - Number(item.cost_price) * Number(item.quantity)) >= 0 ? "text-emerald-600" : "text-red-500")}>
+                                  กำไร: ฿{(Number(item.total_amount) - (Number(item.shipping_fee) || 0) - Number(item.cost_price) * Number(item.quantity)).toLocaleString('th-TH')}
                                 </p>
                               </div>
                             )}
@@ -555,7 +559,8 @@ export function OrderHistory() {
                       {/* Footer total & Action */}
                       {(() => {
                         const orderCost = group.items.reduce((sum, item) => sum + (Number(item.cost_price) || 0) * Number(item.quantity), 0);
-                        const orderProfit = group.total_amount - orderCost;
+                        const orderProductAmount = group.total_amount - group.shipping_fee;
+                        const orderProfit = orderProductAmount - orderCost;
                         return (
                           <div className="px-4 py-3 bg-rose-50/80 dark:bg-rose-950/30 border-t border-muted/60">
                             <div className="flex items-center justify-between">
@@ -569,7 +574,7 @@ export function OrderHistory() {
                                 <span className="text-xs text-muted-foreground">ต้นทุน: ฿{orderCost.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
                                 <span className={cn("text-xs font-semibold", orderProfit >= 0 ? "text-emerald-600" : "text-red-500")}>
                                   กำไร: ฿{orderProfit.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                                  {group.total_amount > 0 && ` (${((orderProfit / group.total_amount) * 100).toFixed(1)}%)`}
+                                  {orderProductAmount > 0 && ` (${((orderProfit / orderProductAmount) * 100).toFixed(1)}%)`}
                                 </span>
                               </div>
                             )}

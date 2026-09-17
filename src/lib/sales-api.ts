@@ -52,6 +52,8 @@ export interface OrderSummary {
   total_items: number;
   total_quantity: number;
   total_amount: number;
+  /** ค่าส่งรวมของออเดอร์ (รวมอยู่ใน total_amount แล้ว) */
+  shipping_fee: number;
   shipping_address?: string;
   shipping_status: ShippingStatus;
   is_legacy: boolean;
@@ -196,6 +198,7 @@ export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
         total_items: 0,
         total_quantity: 0,
         total_amount: 0,
+        shipping_fee: 0,
         shipping_address: sale.shipping_address || '',
         shipping_status: (sale.shipping_status || 'pending') as ShippingStatus,
         is_legacy: !!sale.is_legacy,
@@ -208,6 +211,7 @@ export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
     groups[oId].total_items += 1;
     groups[oId].total_quantity += Number(sale.quantity);
     groups[oId].total_amount += Number(sale.total_amount);
+    groups[oId].shipping_fee += Number(sale.shipping_fee) || 0;
   });
 
   return Object.values(groups).sort((a, b) => {

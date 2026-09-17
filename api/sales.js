@@ -16,6 +16,9 @@ export default async function handler(req, res) {
 
     // GET /api/sales — ดึงรายการขาย (รองรับ date range + รวม legacy_sales)
     if (req.method === 'GET') {
+      // ข้อมูลขายมีที่อยู่/เบอร์ลูกค้า — ต้องล็อกอินก่อน
+      if (!authenticate(req)) return res.status(401).json({ error: 'Unauthorized' });
+
       const {
         date, sku, channel, date_from, date_to,
         include_legacy, limit = 5000, offset = 0,
@@ -135,19 +138,28 @@ export default async function handler(req, res) {
       // Generate order_id
       const dateString = now.split('T')[0].replace(/-/g, '');
       const prefix = `ORD-${dateString}-`;
+      // จองเลขลำดับแบบ atomic: ครั้งแรกของวันเริ่มต่อจากเลขสูงสุดที่มีอยู่, ครั้งต่อไป +1
+      // (เดิมใช้ COUNT ทำให้ออกเลขซ้ำเมื่อมีการลบออเดอร์หรือบันทึกพร้อมกัน)
       const seqResult = await db.execute({
-        sql: `SELECT COUNT(DISTINCT order_id) as count FROM sales_orders WHERE order_id LIKE ?`,
-        args: [`${prefix}%`]
+        sql: `INSERT INTO order_counters (prefix, last_seq)
+              VALUES (?, (SELECT COALESCE(MAX(CAST(SUBSTR(order_id, ?) AS INTEGER)), 0) + 1
+                          FROM sales_orders WHERE order_id LIKE ?))
+              ON CONFLICT(prefix) DO UPDATE SET last_seq = last_seq + 1
+              RETURNING last_seq`,
+        args: [prefix, prefix.length + 1, `${prefix}%`]
       });
-      const seq = String((seqResult.rows[0]?.count || 0) + 1).padStart(3, '0');
+      const seq = String(Number(seqResult.rows[0].last_seq)).padStart(3, '0');
       const orderId = `${prefix}${seq}`;
+
+      // ค่าส่งคิดต่อออเดอร์ — ใช้ค่าจากรายการแรกเท่านั้น แล้วบวกเข้ายอดของรายการแรก (กันนับซ้ำ)
+      const orderShippingFee = Math.max(0, Number(items[0]?.shipping_fee) || 0);
 
       // ตรวจสอบข้อมูลและคำนวณ
       const processed = [];
-      for (const item of items) {
+      for (const [index, item] of items.entries()) {
         const { date, channel, branch_or_platform, sku, product_name, product_category,
                 color, size, quantity, unit_price, discount_type, discount_value,
-                shipping_fee, note, shipping_address, stock_in_id } = item;
+                note, shipping_address, stock_in_id } = item;
 
         if (!date || !sku || !product_name || !stock_in_id) {
           return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบ (date, sku, product_name, stock_in_id)' });
@@ -168,8 +180,8 @@ export default async function handler(req, res) {
           finalUnitPrice = price - discVal;
         }
         if (finalUnitPrice < 0) finalUnitPrice = 0;
-        // ค่าส่ง (ไม่บังคับ) เป็นรายรับ — บวกเข้ายอดรวมของรายการ ไม่โดนส่วนลด
-        const shippingFee = Math.max(0, Number(shipping_fee) || 0);
+        // ค่าส่ง (ไม่บังคับ) เป็นรายรับ — นับรวมยอดขาย ไม่โดนส่วนลด
+        const shippingFee = index === 0 ? orderShippingFee : 0;
         const totalAmount = finalUnitPrice * qty + shippingFee;
 
         processed.push({ date, channel, branch_or_platform, sku, product_name,
