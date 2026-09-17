@@ -99,8 +99,10 @@ export default async function handler(req, res) {
     // POST /api/sales — บันทึกยอดขาย + หักสต๊อก (รองรับทั้ง single object และ array)
     // POST /api/sales?action=manual-income — บันทึก income แบบ manual (ไม่หัก stock) ลง legacy_sales
     if (req.method === 'POST') {
+      // บันทึกยอดขาย/รายรับต้องล็อกอิน (ผู้บันทึกมาจากบัญชีที่ล็อกอินเสมอ)
       const authUser = authenticate(req);
-      const recordedBy = authUser ? authUser.name : '';
+      if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+      const recordedBy = authUser.name;
       const now = new Date().toISOString();
 
       // Manual income (no stock tracking) — writes to legacy_sales with import_source='manual'
