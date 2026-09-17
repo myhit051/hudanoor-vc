@@ -21,6 +21,7 @@ import { getAvailableStock, AvailableStockItem } from "@/lib/stock-api";
 import { NewSalesOrder, groupSalesByOrder } from "@/lib/sales-api";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useUsers } from "@/hooks/use-users";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const toLocalDateStr = (d: Date) => {
@@ -60,10 +61,19 @@ export function SalesEntry() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [stockComboOpen, setStockComboOpen] = useState(false);
+  // Admin บันทึกแทนคนอื่นได้ — ว่าง = บันทึกในชื่อตัวเอง
+  const [recorderOverride, setRecorderOverride] = useState('');
 
   const { salesOrders, isLoading, addSales, isAddingBatch, deleteSale, deleteOrder, isDeleting, isDeletingOrder } = useSales();
   const { settings } = useSettings();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const { users } = useUsers({ enabled: isAdmin });
+
+  const recorderName = (isAdmin && recorderOverride) || user?.name || '';
+  const recorderOptions = useMemo(
+    () => Array.from(new Set([user?.name, ...users.map(u => u.name)].filter((n): n is string => !!n))),
+    [user?.name, users]
+  );
 
   const { data: availableStock = [] } = useQuery({
     queryKey: ['stock', { available: true }],
@@ -180,7 +190,8 @@ export function SalesEntry() {
       shipping_fee: index === 0 ? shippingFee : 0,
       note: item.note,
       shipping_address: channel === 'online' ? shippingAddress.trim() : '',
-      stock_in_id: item.stock_in_id
+      stock_in_id: item.stock_in_id,
+      ...(isAdmin && recorderOverride && recorderOverride !== user?.name ? { recorded_by: recorderOverride } : {})
     }));
 
   const handleSave = () => {
@@ -203,6 +214,7 @@ export function SalesEntry() {
         setBranchOrPlatform('');
         setShippingAddress('');
         setShippingFeeInput('');
+        setRecorderOverride('');
       }
     });
   };
@@ -272,11 +284,37 @@ export function SalesEntry() {
             </div>
 
             <div>
-              <Label className="text-xs text-muted-foreground">ผู้บันทึก</Label>
-              <div className="flex items-center gap-2 mt-1 px-3 py-2 bg-muted/50 rounded-lg border border-border">
-                <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-sm font-medium">{user?.name || '-'}</span>
-              </div>
+              {isAdmin ? (
+                <>
+                  <Label htmlFor="recorder">ผู้บันทึก <span className="font-normal text-muted-foreground">(Admin เลือกบันทึกแทนคนอื่นได้ — ยอดจะนับเป็นของคนที่เลือก)</span></Label>
+                  <Select value={recorderName} onValueChange={v => setRecorderOverride(v === user?.name ? '' : v)}>
+                    <SelectTrigger
+                      id="recorder"
+                      className={cn("mt-1", recorderName !== user?.name && "border-amber-400 bg-amber-50/60 dark:bg-amber-950/20")}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recorderOptions.map(name => (
+                        <SelectItem key={name} value={name}>
+                          {name}{name === user?.name ? ' (ฉัน)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {recorderName !== user?.name && (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">กำลังบันทึกในชื่อ {recorderName}</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Label className="text-xs text-muted-foreground">ผู้บันทึก</Label>
+                  <div className="flex items-center gap-2 mt-1 px-3 py-2 bg-muted/50 rounded-lg border border-border">
+                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-sm font-medium">{user?.name || '-'}</span>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

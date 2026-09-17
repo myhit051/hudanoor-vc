@@ -61,7 +61,10 @@ export interface OrderSummary {
   items: SalesOrder[];
 }
 
-export type NewSalesOrder = Omit<SalesOrder, 'id' | 'created_at' | 'discount_amount' | 'final_unit_price' | 'shipping_status' | 'total_amount' | 'order_id' | 'recorded_by'>;
+export type NewSalesOrder = Omit<SalesOrder, 'id' | 'created_at' | 'discount_amount' | 'final_unit_price' | 'shipping_status' | 'total_amount' | 'order_id' | 'recorded_by'> & {
+  /** Admin เท่านั้น: บันทึกในชื่อบัญชีอื่น (ว่าง = ผู้ที่ล็อกอิน) */
+  recorded_by?: string;
+};
 
 export async function getSalesOrders(params?: {
   date?: string;

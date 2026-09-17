@@ -99,7 +99,7 @@ export default async function handler(req, res) {
     // POST /api/sales — บันทึกยอดขาย + หักสต๊อก (รองรับทั้ง single object และ array)
     // POST /api/sales?action=manual-income — บันทึก income แบบ manual (ไม่หัก stock) ลง legacy_sales
     if (req.method === 'POST') {
-      // บันทึกยอดขาย/รายรับต้องล็อกอิน (ผู้บันทึกมาจากบัญชีที่ล็อกอินเสมอ)
+      // บันทึกยอดขาย/รายรับต้องล็อกอิน (ผู้บันทึกตั้งต้นคือบัญชีที่ล็อกอิน)
       const authUser = authenticate(req);
       if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
       const recordedBy = authUser.name;
@@ -136,6 +136,24 @@ export default async function handler(req, res) {
       }
 
       const items = Array.isArray(req.body) ? req.body : [req.body];
+
+      // แอดมินบันทึกแทนพนักงานได้: เลือกผู้บันทึกเป็นบัญชีอื่น (ต้องเป็นบัญชีที่ใช้งานอยู่
+      // เพื่อให้ชื่อตรงกับที่ใช้คิดค่าคอม) — ผู้ใช้ทั่วไปบันทึกได้แค่ในชื่อตัวเอง
+      let orderRecordedBy = recordedBy;
+      const requestedRecorder = String(items[0]?.recorded_by || '').trim();
+      if (requestedRecorder && requestedRecorder !== recordedBy) {
+        if (authUser.role !== 'admin') {
+          return res.status(403).json({ error: 'เฉพาะ Admin เท่านั้นที่เลือกผู้บันทึกเป็นคนอื่นได้' });
+        }
+        const accountCheck = await db.execute({
+          sql: `SELECT 1 FROM employees WHERE account_active = 1 AND account_name = ? LIMIT 1`,
+          args: [requestedRecorder]
+        });
+        if (accountCheck.rows.length === 0) {
+          return res.status(400).json({ error: `ไม่พบบัญชีผู้บันทึก "${requestedRecorder}" ที่ใช้งานอยู่` });
+        }
+        orderRecordedBy = requestedRecorder;
+      }
 
       // Generate order_id
       const dateString = now.split('T')[0].replace(/-/g, '');
@@ -244,7 +262,7 @@ export default async function handler(req, res) {
             p.qty, p.price, p.discType, p.discVal, p.discountAmount,
             p.finalUnitPrice, p.shippingFee, p.totalAmount, p.note || '',
             p.channel === 'online' ? (p.shipping_address || '') : '',
-            p.stock_in_id, orderId, recordedBy, now
+            p.stock_in_id, orderId, orderRecordedBy, now
           ]
         });
       }
