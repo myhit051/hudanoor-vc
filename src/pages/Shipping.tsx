@@ -70,21 +70,21 @@ const MAX_LABEL_ITEMS = 6;
 
 const baht = (n: number) => `฿${n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-// แถบ COD พื้นดำตัวขาว — ให้พนักงานขนส่งเห็นชัดว่าต้องเก็บเงินเท่าไหร่
+// กรอบ COD พื้นขาวขอบดำหนา ตัวใหญ่ — เห็นชัดว่าต้องเก็บเงินเท่าไหร่ และไม่เปลืองหมึก (บอสขอเลิกใช้แถบพื้นดำ)
 function CodBanner({ amount, compact }: { amount: number; compact?: boolean }) {
   return (
     <div
       style={{
-        background: '#000', color: '#fff', borderRadius: compact ? '4px' : '6px',
-        padding: compact ? '2px 8px 4px' : '6px 12px 8px',
+        background: '#fff', color: '#000', border: `${compact ? 2 : 3}px solid #000`, borderRadius: compact ? '4px' : '6px',
+        padding: compact ? '0 8px 2px' : '4px 12px 6px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexShrink: 0, lineHeight: 1.5
       }}
     >
       <div>
-        <span style={{ fontSize: compact ? '17px' : '28px', fontWeight: 800, letterSpacing: '1px' }}>COD</span>
-        <span style={{ fontSize: compact ? '9px' : '12px', fontWeight: 600, marginLeft: compact ? '6px' : '10px' }}>เก็บเงินปลายทาง</span>
+        <span style={{ fontSize: compact ? '20px' : '32px', fontWeight: 800, letterSpacing: '1px' }}>COD</span>
+        <span style={{ fontSize: compact ? '10px' : '14px', fontWeight: 700, marginLeft: compact ? '6px' : '10px' }}>เก็บเงินปลายทาง</span>
       </div>
-      <span style={{ fontSize: compact ? '16px' : '26px', fontWeight: 800 }}>{baht(amount)}</span>
+      <span style={{ fontSize: compact ? '20px' : '32px', fontWeight: 800 }}>{baht(amount)}</span>
     </div>
   );
 }
