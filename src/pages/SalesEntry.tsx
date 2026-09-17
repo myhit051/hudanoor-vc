@@ -40,6 +40,7 @@ const emptyItemForm = {
   unit_price: 0,
   discount_type: 'amount' as 'amount' | 'percent',
   discount_value: 0,
+  shipping_fee: 0,
   note: ''
 };
 
@@ -115,9 +116,12 @@ export function SalesEntry() {
     return Math.max(0, price - discountAmount);
   }, [itemForm.unit_price, discountAmount]);
 
+  const shippingFee = Math.max(0, Number(itemForm.shipping_fee) || 0);
+
+  // ยอดรวม = ราคาสุทธิ × จำนวน + ค่าส่ง (ค่าส่งเป็นรายรับ นับรวมยอดขาย)
   const totalAmount = useMemo(() => {
-    return finalUnitPrice * (Number(itemForm.quantity) || 1);
-  }, [finalUnitPrice, itemForm.quantity]);
+    return finalUnitPrice * (Number(itemForm.quantity) || 1) + shippingFee;
+  }, [finalUnitPrice, itemForm.quantity, shippingFee]);
 
   // ยอดรวมทั้ง cart
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.totalAmount, 0), [cart]);
@@ -171,6 +175,7 @@ export function SalesEntry() {
       unit_price: Number(item.unit_price) || 0,
       discount_type: item.discount_type,
       discount_value: Number(item.discount_value) || 0,
+      shipping_fee: Number(item.shipping_fee) || 0,
       note: item.note,
       shipping_address: channel === 'online' ? shippingAddress.trim() : '',
       stock_in_id: item.stock_in_id
@@ -410,6 +415,22 @@ export function SalesEntry() {
                 </div>
 
                 <div>
+                  <Label htmlFor="shipping_fee">
+                    ค่าส่ง (บาท) <span className="font-normal text-muted-foreground">(ไม่บังคับ — ลูกค้าโอนมา นับรวมยอดขาย)</span>
+                  </Label>
+                  <Input
+                    id="shipping_fee"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="mt-1"
+                    placeholder="เช่น 50"
+                    value={itemForm.shipping_fee || ''}
+                    onChange={e => handleItemSet('shipping_fee', e.target.value)}
+                  />
+                </div>
+
+                <div>
                   <Label>ส่วนลด</Label>
                   <div className="flex gap-2 mt-1">
                     <Select
@@ -450,6 +471,12 @@ export function SalesEntry() {
                     <span>ราคาสุทธิ/ชิ้น</span>
                     <span>฿{finalUnitPrice.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
                   </div>
+                  {shippingFee > 0 && (
+                    <div className="flex justify-between text-blue-600">
+                      <span>ค่าส่ง</span>
+                      <span>+ ฿{shippingFee.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold text-base text-rose-600">
                     <span>ยอดรวม ({itemForm.quantity} ชิ้น)</span>
                     <span>฿{totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
@@ -495,6 +522,9 @@ export function SalesEntry() {
                           {item.quantity} ชิ้น × ฿{Number(item.unit_price).toLocaleString('th-TH')}
                           {item.discountAmount > 0 && (
                             <span className="text-rose-500"> (ลด ฿{item.discountAmount.toLocaleString('th-TH')})</span>
+                          )}
+                          {Number(item.shipping_fee) > 0 && (
+                            <span className="text-blue-600"> + ค่าส่ง ฿{Number(item.shipping_fee).toLocaleString('th-TH')}</span>
                           )}
                           <span className="font-semibold ml-1">= ฿{item.totalAmount.toLocaleString('th-TH')}</span>
                         </div>
@@ -705,6 +735,11 @@ export function SalesEntry() {
                             {Number(item.discount_amount) > 0 && (
                               <p className="text-[11px] text-rose-500">
                                 -฿{Number(item.discount_amount).toLocaleString('th-TH')}
+                              </p>
+                            )}
+                            {Number(item.shipping_fee) > 0 && (
+                              <p className="text-[11px] text-blue-600">
+                                ค่าส่ง +฿{Number(item.shipping_fee).toLocaleString('th-TH')}
                               </p>
                             )}
                             <p className="text-sm font-semibold">

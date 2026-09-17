@@ -25,6 +25,7 @@ export interface SalesOrder {
   discount_type: 'amount' | 'percent';
   discount_value: number;
   discount_amount: number;
+  shipping_fee?: number;
   final_unit_price: number;
   total_amount: number;
   note: string;

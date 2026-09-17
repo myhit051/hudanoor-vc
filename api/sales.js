@@ -65,6 +65,7 @@ export default async function handler(req, res) {
             discount_type: 'amount',
             discount_value: 0,
             discount_amount: 0,
+            shipping_fee: 0,
             final_unit_price: unitPrice,
             total_amount: total,
             note: r.note || '',
@@ -143,7 +144,7 @@ export default async function handler(req, res) {
       for (const item of items) {
         const { date, channel, branch_or_platform, sku, product_name, product_category,
                 color, size, quantity, unit_price, discount_type, discount_value,
-                note, shipping_address, stock_in_id } = item;
+                shipping_fee, note, shipping_address, stock_in_id } = item;
 
         if (!date || !sku || !product_name || !stock_in_id) {
           return res.status(400).json({ error: 'กรุณากรอกข้อมูลให้ครบ (date, sku, product_name, stock_in_id)' });
@@ -164,11 +165,13 @@ export default async function handler(req, res) {
           finalUnitPrice = price - discVal;
         }
         if (finalUnitPrice < 0) finalUnitPrice = 0;
-        const totalAmount = finalUnitPrice * qty;
+        // ค่าส่ง (ไม่บังคับ) เป็นรายรับ — บวกเข้ายอดรวมของรายการ ไม่โดนส่วนลด
+        const shippingFee = Math.max(0, Number(shipping_fee) || 0);
+        const totalAmount = finalUnitPrice * qty + shippingFee;
 
         processed.push({ date, channel, branch_or_platform, sku, product_name,
           product_category: product_category || '', color, size,
-          qty, price, discType, discVal, discountAmount, finalUnitPrice, totalAmount,
+          qty, price, discType, discVal, discountAmount, finalUnitPrice, shippingFee, totalAmount,
           note, shipping_address, stock_in_id });
       }
 
@@ -215,14 +218,14 @@ export default async function handler(req, res) {
           sql: `INSERT INTO sales_orders
                   (id, date, channel, branch_or_platform, sku, product_name, product_category,
                    color, size, quantity, unit_price, discount_type, discount_value, discount_amount,
-                   final_unit_price, total_amount, note, shipping_address, stock_in_id, order_id, recorded_by, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                   final_unit_price, shipping_fee, total_amount, note, shipping_address, stock_in_id, order_id, recorded_by, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           args: [
             id, p.date, p.channel || '', p.branch_or_platform || '',
             p.sku, p.product_name, p.product_category || '',
             p.color || '', p.size || '',
             p.qty, p.price, p.discType, p.discVal, p.discountAmount,
-            p.finalUnitPrice, p.totalAmount, p.note || '',
+            p.finalUnitPrice, p.shippingFee, p.totalAmount, p.note || '',
             p.channel === 'online' ? (p.shipping_address || '') : '',
             p.stock_in_id, orderId, recordedBy, now
           ]

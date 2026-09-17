@@ -530,6 +530,11 @@ export function OrderHistory() {
                                 ส่วนลด: -฿{Number(item.discount_amount).toLocaleString('th-TH')}
                               </p>
                             )}
+                            {Number(item.shipping_fee) > 0 && (
+                              <p className="text-[11px] text-blue-600 mt-0.5">
+                                ค่าส่ง: +฿{Number(item.shipping_fee).toLocaleString('th-TH')}
+                              </p>
+                            )}
                             <p className="text-sm font-semibold mt-0.5">
                               ฿{Number(item.total_amount).toLocaleString('th-TH')}
                             </p>
