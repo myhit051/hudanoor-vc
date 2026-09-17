@@ -194,13 +194,17 @@ export function SalesEntry() {
       ...(isAdmin && recorderOverride && recorderOverride !== user?.name ? { recorded_by: recorderOverride } : {})
     }));
 
+  // บันทึกแล้วกรอกออเดอร์ของลูกค้าคนถัดไปต่อ: ล้างเฉพาะข้อมูลของออเดอร์นี้
+  // (สินค้า ตัวเลข ค่าส่ง ที่อยู่) — คงวันที่ ช่องทาง สาขา และผู้บันทึกไว้
   const handleSave = () => {
     if (!validateAndSave()) return;
     addSales(buildOrders(), {
       onSuccess: () => {
         setCart([]);
+        setItemForm(emptyItemForm);
         setShippingAddress('');
         setShippingFeeInput('');
+        document.getElementById('shipping_fee')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     });
   };
@@ -210,6 +214,7 @@ export function SalesEntry() {
     addSales(buildOrders(), {
       onSuccess: () => {
         setCart([]);
+        setItemForm(emptyItemForm);
         setChannel('');
         setBranchOrPlatform('');
         setShippingAddress('');
@@ -597,7 +602,7 @@ export function SalesEntry() {
                 </div>
 
                 {/* Buttons บันทึก */}
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Button
                     className="flex-1 bg-gradient-to-r from-rose-500 to-pink-500 text-white"
                     disabled={isAddingBatch}
@@ -605,7 +610,7 @@ export function SalesEntry() {
                   >
                     {isAddingBatch
                       ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      : <><PackageCheck className="h-4 w-4 mr-2" />บันทึก {cart.length} รายการ</>}
+                      : <><PackageCheck className="h-4 w-4 mr-2" />บันทึก → ออเดอร์ถัดไป</>}
                   </Button>
                   <Button
                     variant="outline"
@@ -613,9 +618,13 @@ export function SalesEntry() {
                     disabled={isAddingBatch}
                     onClick={handleSaveAndClear}
                   >
-                    บันทึกและล้างฟอร์ม
+                    บันทึกและล้างทั้งหมด
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-medium">ออเดอร์ถัดไป</span> = คงวันที่ ช่องทาง สาขา และผู้บันทึกไว้ ล้างเฉพาะสินค้า ค่าส่ง และที่อยู่ ·{' '}
+                  <span className="font-medium">ล้างทั้งหมด</span> = เริ่มฟอร์มใหม่
+                </p>
               </div>
             )}
 
