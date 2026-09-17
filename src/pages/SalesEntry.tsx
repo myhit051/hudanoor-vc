@@ -12,7 +12,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, ShoppingCart, Trash2, ChevronsUpDown, Check, Plus, PackageCheck, Lock, Receipt, Package, DollarSign, MapPin } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { CalendarIcon, ShoppingCart, Trash2, ChevronsUpDown, Check, Plus, PackageCheck, Lock, Receipt, Package, DollarSign, MapPin, HandCoins } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { useSales } from "@/hooks/use-sales";
 import { useSettings } from "@/hooks/use-settings";
@@ -57,6 +58,8 @@ export function SalesEntry() {
   const [branchOrPlatform, setBranchOrPlatform] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
   const [shippingFeeInput, setShippingFeeInput] = useState('');
+  // เก็บเงินปลายทาง — เฉพาะออเดอร์ออนไลน์
+  const [isCod, setIsCod] = useState(false);
   const [itemForm, setItemForm] = useState(emptyItemForm);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -91,7 +94,10 @@ export function SalesEntry() {
   const handleChannelChange = (v: string) => {
     setChannel(v);
     setBranchOrPlatform('');
-    if (v !== 'online') setShippingAddress('');
+    if (v !== 'online') {
+      setShippingAddress('');
+      setIsCod(false);
+    }
   };
 
   const handleSelectStock = (item: AvailableStockItem) => {
@@ -190,6 +196,7 @@ export function SalesEntry() {
       shipping_fee: index === 0 ? shippingFee : 0,
       note: item.note,
       shipping_address: channel === 'online' ? shippingAddress.trim() : '',
+      payment_method: channel === 'online' && isCod ? 'cod' : 'transfer',
       stock_in_id: item.stock_in_id,
       ...(isAdmin && recorderOverride && recorderOverride !== user?.name ? { recorded_by: recorderOverride } : {})
     }));
@@ -204,6 +211,7 @@ export function SalesEntry() {
         setItemForm(emptyItemForm);
         setShippingAddress('');
         setShippingFeeInput('');
+        setIsCod(false);
         document.getElementById('shipping_fee')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     });
@@ -219,6 +227,7 @@ export function SalesEntry() {
         setBranchOrPlatform('');
         setShippingAddress('');
         setShippingFeeInput('');
+        setIsCod(false);
         setRecorderOverride('');
       }
     });
@@ -368,6 +377,26 @@ export function SalesEntry() {
                   placeholder="วางชื่อผู้รับ เบอร์โทร และที่อยู่จัดส่ง"
                   rows={3}
                 />
+                <label
+                  htmlFor="is_cod"
+                  className={cn(
+                    "mt-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 cursor-pointer transition-colors",
+                    isCod
+                      ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30"
+                      : "border-border bg-white/80 dark:bg-gray-950/40"
+                  )}
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium">
+                    <HandCoins className={cn("h-4 w-4", isCod ? "text-amber-600" : "text-muted-foreground")} />
+                    เก็บเงินปลายทาง (COD)
+                  </span>
+                  <Switch id="is_cod" checked={isCod} onCheckedChange={setIsCod} className="min-h-0 min-w-0" />
+                </label>
+                {isCod && (
+                  <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
+                    ยอดที่ต้องเก็บ = ยอดรวมทั้งหมดของออเดอร์ (รวมค่าส่ง){cart.length > 0 && ` · ฿${cartTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`}
+                  </p>
+                )}
               </div>
             )}
 
@@ -596,7 +625,9 @@ export function SalesEntry() {
                     </>
                   )}
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">ยอดรวมทั้งหมด ({cartQty} ชิ้น)</span>
+                    <span className="text-sm font-medium">
+                      {channel === 'online' && isCod ? 'ยอดเก็บเงินปลายทาง (COD)' : 'ยอดรวมทั้งหมด'} ({cartQty} ชิ้น)
+                    </span>
                     <span className="text-lg font-bold text-orange-600">฿{cartTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
                   </div>
                 </div>
@@ -732,6 +763,9 @@ export function SalesEntry() {
                             >
                               {group.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}
                             </Badge>
+                            {group.payment_method === 'cod' && (
+                              <Badge className="text-[10px] px-1.5 py-0 shrink-0 bg-amber-500 hover:bg-amber-500 text-white border-0">COD</Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <span className="text-xs text-muted-foreground">{group.branch_or_platform}</span>

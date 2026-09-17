@@ -31,6 +31,7 @@ export interface SalesOrder {
   note: string;
   shipping_address?: string;
   shipping_status?: ShippingStatus | '';
+  payment_method?: PaymentMethod;
   stock_in_id: string;
   order_id: string;
   recorded_by: string;
@@ -41,6 +42,8 @@ export interface SalesOrder {
 }
 
 export type ShippingStatus = 'pending' | 'shipped' | 'returned';
+/** transfer = ลูกค้าโอนแล้ว, cod = เก็บเงินปลายทาง (ยอดที่ต้องเก็บ = total_amount ของออเดอร์) */
+export type PaymentMethod = 'transfer' | 'cod';
 
 export interface OrderSummary {
   order_id: string;
@@ -56,6 +59,7 @@ export interface OrderSummary {
   shipping_fee: number;
   shipping_address?: string;
   shipping_status: ShippingStatus;
+  payment_method: PaymentMethod;
   is_legacy: boolean;
   import_source?: string;
   items: SalesOrder[];
@@ -204,6 +208,7 @@ export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
         shipping_fee: 0,
         shipping_address: sale.shipping_address || '',
         shipping_status: (sale.shipping_status || 'pending') as ShippingStatus,
+        payment_method: sale.payment_method === 'cod' ? 'cod' : 'transfer',
         is_legacy: !!sale.is_legacy,
         import_source: sale.import_source,
         items: []

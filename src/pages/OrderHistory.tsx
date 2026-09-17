@@ -482,6 +482,9 @@ export function OrderHistory() {
                             >
                               {group.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}
                             </Badge>
+                            {group.payment_method === 'cod' && (
+                              <Badge className="text-[10px] px-1.5 py-0 shrink-0 bg-amber-500 hover:bg-amber-500 text-white border-0">COD</Badge>
+                            )}
                             {group.is_legacy && (
                               <Badge
                                 variant="outline"

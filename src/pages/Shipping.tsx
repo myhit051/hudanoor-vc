@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
-  Truck, Search, Printer, MapPin, Clock, CheckCircle2, Undo2, ChevronDown, AlertTriangle, Loader2, PackageOpen
+  Truck, Search, Printer, MapPin, Clock, CheckCircle2, Undo2, ChevronDown, AlertTriangle, Loader2, PackageOpen, HandCoins
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { getSalesOrders, groupSalesByOrder, updateShippingStatus, OrderSummary, ShippingStatus } from "@/lib/sales-api";
@@ -68,6 +68,27 @@ const truncate = (text: string, max: number) =>
   text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
 const MAX_LABEL_ITEMS = 6;
 
+const baht = (n: number) => `฿${n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// แถบ COD พื้นดำตัวขาว — ให้พนักงานขนส่งเห็นชัดว่าต้องเก็บเงินเท่าไหร่
+function CodBanner({ amount, compact }: { amount: number; compact?: boolean }) {
+  return (
+    <div
+      style={{
+        background: '#000', color: '#fff', borderRadius: compact ? '4px' : '6px',
+        padding: compact ? '2px 8px 4px' : '6px 12px 8px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexShrink: 0, lineHeight: 1.5
+      }}
+    >
+      <div>
+        <span style={{ fontSize: compact ? '17px' : '28px', fontWeight: 800, letterSpacing: '1px' }}>COD</span>
+        <span style={{ fontSize: compact ? '9px' : '12px', fontWeight: 600, marginLeft: compact ? '6px' : '10px' }}>เก็บเงินปลายทาง</span>
+      </div>
+      <span style={{ fontSize: compact ? '16px' : '26px', fontWeight: 800 }}>{baht(amount)}</span>
+    </div>
+  );
+}
+
 interface Sender {
   name: string;
   phone: string;
@@ -111,6 +132,8 @@ function CompactShippingLabel({ order, sender }: { order: OrderSummary; sender: 
         </div>
       </div>
 
+      {order.payment_method === 'cod' && <CodBanner amount={order.total_amount} compact />}
+
       <div style={{ border: '1.5px solid #000', borderRadius: '5px', padding: '5px 8px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <div style={{ fontSize: '9px', fontWeight: 700, lineHeight: 1.5 }}>ผู้รับ</div>
         <div style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'pre-line', lineHeight: 1.4, wordBreak: 'break-word' }}>
@@ -146,6 +169,8 @@ function ShippingLabel({ order, sender }: { order: OrderSummary; sender: Sender 
           {order.branch_or_platform && <div style={{ fontSize: '10px' }}>{order.branch_or_platform}</div>}
         </div>
       </div>
+
+      {order.payment_method === 'cod' && <CodBanner amount={order.total_amount} />}
 
       <div style={{ border: '2px solid #000', borderRadius: '6px', padding: '10px 12px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '4px' }}>ผู้รับ</div>
@@ -470,6 +495,12 @@ export function Shipping() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-sm">{order.order_id}</span>
                       <StatusBadge status={order.shipping_status} />
+                      {order.payment_method === 'cod' && (
+                        <Badge className="gap-1 text-[11px] px-2 py-0.5 bg-amber-500 hover:bg-amber-500 text-white border-0">
+                          <HandCoins className="h-3 w-3" />
+                          COD เก็บ {baht(order.total_amount)}
+                        </Badge>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {formatDate(order.date)} · {order.channel === 'store' ? 'หน้าร้าน' : 'ออนไลน์'}
                         {order.branch_or_platform ? ` · ${order.branch_or_platform}` : ''}

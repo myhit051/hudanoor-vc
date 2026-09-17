@@ -76,6 +76,7 @@ export default async function handler(req, res) {
             note: r.note || '',
             shipping_address: '',
             shipping_status: '',
+            payment_method: 'transfer',
             stock_in_id: '',
             order_id: '',
             recorded_by: r.recorded_by || r.import_source || '',
@@ -171,6 +172,10 @@ export default async function handler(req, res) {
       const seq = String(Number(seqResult.rows[0].last_seq)).padStart(3, '0');
       const orderId = `${prefix}${seq}`;
 
+      // COD คิดต่อออเดอร์ และมีได้เฉพาะช่องทางออนไลน์ (ต้องส่งของ)
+      const orderPaymentMethod =
+        items[0]?.payment_method === 'cod' && items[0]?.channel === 'online' ? 'cod' : 'transfer';
+
       // ค่าส่งคิดต่อออเดอร์ — ใช้ค่าจากรายการแรกเท่านั้น แล้วบวกเข้ายอดของรายการแรก (กันนับซ้ำ)
       const orderShippingFee = Math.max(0, Number(items[0]?.shipping_fee) || 0);
 
@@ -253,8 +258,8 @@ export default async function handler(req, res) {
           sql: `INSERT INTO sales_orders
                   (id, date, channel, branch_or_platform, sku, product_name, product_category,
                    color, size, quantity, unit_price, discount_type, discount_value, discount_amount,
-                   final_unit_price, shipping_fee, total_amount, note, shipping_address, stock_in_id, order_id, recorded_by, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                   final_unit_price, shipping_fee, total_amount, note, shipping_address, payment_method, stock_in_id, order_id, recorded_by, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           args: [
             id, p.date, p.channel || '', p.branch_or_platform || '',
             p.sku, p.product_name, p.product_category || '',
@@ -262,6 +267,7 @@ export default async function handler(req, res) {
             p.qty, p.price, p.discType, p.discVal, p.discountAmount,
             p.finalUnitPrice, p.shippingFee, p.totalAmount, p.note || '',
             p.channel === 'online' ? (p.shipping_address || '') : '',
+            orderPaymentMethod,
             p.stock_in_id, orderId, orderRecordedBy, now
           ]
         });
@@ -324,6 +330,7 @@ export default async function handler(req, res) {
           setArgs.push(channel);
           if (channel === 'store') {
             setParts.push("shipping_address = ''");
+            setParts.push("payment_method = 'transfer'");
           }
         }
         if (hasRecordedBy) {
