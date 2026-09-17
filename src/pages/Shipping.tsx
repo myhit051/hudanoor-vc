@@ -50,14 +50,16 @@ const STATUS_META: Record<ShippingStatus, { label: string; icon: typeof Clock; c
 };
 const STATUS_KEYS = Object.keys(STATUS_META) as ShippingStatus[];
 
-type LabelSize = 'sticker' | 'a4';
+type LabelSize = 'sticker' | 'a4' | 'a4-8';
 
-// ขนาดเป็น px ที่ 96dpi — สติ๊กเกอร์ 100×150 มม. / A4 แบ่ง 4 ช่อง (105×148.5 มม.)
+// ขนาดเป็น px ที่ 96dpi — สติ๊กเกอร์ 100×150 มม. / A4 แบ่ง 4 ช่อง (105×148.5 มม.) / A4 แบ่ง 8 ช่อง (105×74 มม.)
 const PX_PER_MM = 96 / 25.4;
-const LABEL_SIZES: Record<LabelSize, { label: string; pageMm: [number, number]; perPage: number }> = {
-  sticker: { label: 'สติ๊กเกอร์ 100×150 มม. (1 ใบ/หน้า)', pageMm: [100, 150], perPage: 1 },
-  a4: { label: 'กระดาษ A4 (4 ใบ/หน้า)', pageMm: [210, 297], perPage: 4 }
+const LABEL_SIZES: Record<LabelSize, { label: string; pageMm: [number, number]; cols: number; rows: number; compact: boolean }> = {
+  sticker: { label: 'สติ๊กเกอร์ 100×150 มม. (1 ใบ/หน้า)', pageMm: [100, 150], cols: 1, rows: 1, compact: false },
+  a4: { label: 'กระดาษ A4 (4 ใบ/หน้า)', pageMm: [210, 297], cols: 2, rows: 2, compact: false },
+  'a4-8': { label: 'กระดาษ A4 (8 ใบ/หน้า)', pageMm: [210, 297], cols: 2, rows: 4, compact: true }
 };
+const MAX_COMPACT_ITEMS = 2;
 const MAX_LABEL_ITEMS = 6;
 
 interface Sender {
@@ -74,6 +76,46 @@ function StatusBadge({ status }: { status: ShippingStatus }) {
       <Icon className="h-3 w-3" />
       {meta.label}
     </Badge>
+  );
+}
+
+// ใบปะหน้าแบบย่อสำหรับช่องเล็ก (A4 8 ใบ/หน้า) — เน้นที่อยู่ผู้รับ ย่อผู้ส่งและรายการสินค้าเหลือบรรทัดเดียว
+function CompactShippingLabel({ order, sender }: { order: OrderSummary; sender: Sender }) {
+  const items = order.items.slice(0, MAX_COMPACT_ITEMS);
+  const more = order.items.length - items.length;
+  const itemText = items
+    .map(i => `${i.sku} ${i.product_name}${i.size ? ` ${i.size}` : ''} ×${i.quantity}`)
+    .join(', ') + (more > 0 ? ` +อีก ${more} รายการ` : '');
+  return (
+    <div
+      style={{ width: '100%', height: '100%', boxSizing: 'border-box', padding: '8px 10px', fontFamily: "'Noto Sans Thai', sans-serif", color: '#000', background: '#fff', display: 'flex', flexDirection: 'column', gap: '4px' }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '6px', lineHeight: 1.45 }}>
+        <div style={{ minWidth: 0, fontSize: '8.5px' }}>
+          <div>
+            <span style={{ fontWeight: 600 }}>ผู้ส่ง </span>
+            <span style={{ fontWeight: 700, fontSize: '10px' }}>{sender.name}</span>
+            {sender.phone && <span> โทร {sender.phone}</span>}
+          </div>
+          {sender.address && <div>{sender.address.replace(/\s*\n\s*/g, ' ')}</div>}
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0, fontSize: '8.5px' }}>
+          <div style={{ fontSize: '9.5px', fontWeight: 700, border: '1.2px solid #000', padding: '1px 6px 3px', borderRadius: '3px', lineHeight: 1.6 }}>{order.order_id}</div>
+          <div style={{ marginTop: '1px' }}>{formatDate(order.date)}</div>
+        </div>
+      </div>
+
+      <div style={{ border: '1.5px solid #000', borderRadius: '5px', padding: '5px 8px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <div style={{ fontSize: '9px', fontWeight: 700, lineHeight: 1.5 }}>ผู้รับ</div>
+        <div style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'pre-line', lineHeight: 1.4, wordBreak: 'break-word' }}>
+          {order.shipping_address}
+        </div>
+      </div>
+
+      <div style={{ fontSize: '8.5px', lineHeight: 1.6, flexShrink: 0 }}>
+        <span style={{ fontWeight: 700 }}>สินค้า {order.total_quantity} ชิ้น: </span>{itemText}
+      </div>
+    </div>
   );
 }
 
@@ -253,8 +295,9 @@ export function Shipping() {
   // แบ่งใบปะหน้าเป็นหน้า ๆ ตามขนาดกระดาษ
   const size = LABEL_SIZES[labelSize];
   const printPages: OrderSummary[][] = [];
-  for (let i = 0; i < printOrders.length; i += size.perPage) {
-    printPages.push(printOrders.slice(i, i + size.perPage));
+  const perPage = size.cols * size.rows;
+  for (let i = 0; i < printOrders.length; i += perPage) {
+    printPages.push(printOrders.slice(i, i + perPage));
   }
   const pageW = size.pageMm[0] * PX_PER_MM;
   const pageH = size.pageMm[1] * PX_PER_MM;
@@ -475,20 +518,24 @@ export function Shipping() {
                 height: `${pageH}px`,
                 background: '#fff',
                 display: 'grid',
-                gridTemplateColumns: size.perPage === 1 ? '1fr' : '1fr 1fr',
-                gridTemplateRows: size.perPage === 1 ? '1fr' : '1fr 1fr'
+                gridTemplateColumns: `repeat(${size.cols}, 1fr)`,
+                gridTemplateRows: `repeat(${size.rows}, 1fr)`
               }}
             >
               {page.map((order, oi) => (
                 <div
                   key={order.order_id}
-                  style={size.perPage === 1 ? { minHeight: 0 } : {
+                  style={{
                     minHeight: 0,
-                    borderRight: oi % 2 === 0 ? '1px dashed #999' : undefined,
-                    borderBottom: oi < 2 ? '1px dashed #999' : undefined
+                    overflow: 'hidden',
+                    // เส้นประไว้ตัดระหว่างช่อง
+                    borderRight: size.cols > 1 && oi % size.cols < size.cols - 1 ? '1px dashed #999' : undefined,
+                    borderBottom: Math.floor(oi / size.cols) < size.rows - 1 ? '1px dashed #999' : undefined
                   }}
                 >
-                  <ShippingLabel order={order} sender={sender} />
+                  {size.compact
+                    ? <CompactShippingLabel order={order} sender={sender} />
+                    : <ShippingLabel order={order} sender={sender} />}
                 </div>
               ))}
             </div>
