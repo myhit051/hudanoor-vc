@@ -524,7 +524,7 @@ export function Shipping() {
 
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <p className="text-xs text-muted-foreground truncate">
-                        {order.items.map(i => `${i.product_name}${i.size ? ` ${i.size}` : ''} ×${i.quantity}`).join(', ')}
+                        {order.items.map(i => `${i.sku ? `${i.sku} ` : ''}${i.product_name}${i.size ? ` ${i.size}` : ''} ×${i.quantity}`).join(', ')}
                       </p>
                       <div className="ml-auto flex gap-1 shrink-0">
                         {STATUS_KEYS.filter(k => k !== order.shipping_status).map(k => {
