@@ -366,6 +366,23 @@ export function SalesEntry() {
               </div>
             )}
 
+            {/* ค่าส่งของทั้งออเดอร์ — แสดงตลอด ไม่ต้องรอเพิ่มสินค้าก่อน */}
+            <div>
+              <Label htmlFor="shipping_fee">
+                ค่าส่ง (บาท) <span className="font-normal text-muted-foreground">(ไม่บังคับ — ลูกค้าโอนมา นับรวมยอดขาย, ใส่ครั้งเดียวต่อออเดอร์)</span>
+              </Label>
+              <Input
+                id="shipping_fee"
+                type="number"
+                min="0"
+                step="0.01"
+                className="mt-1"
+                placeholder="เช่น 50"
+                value={shippingFeeInput}
+                onChange={e => setShippingFeeInput(e.target.value)}
+              />
+            </div>
+
             {/* เส้นแบ่ง: ส่วนเพิ่มสินค้า */}
             <div className="border-t pt-4">
               <p className="text-sm font-medium text-muted-foreground mb-3">เพิ่มสินค้าในรายการ</p>
@@ -557,23 +574,6 @@ export function SalesEntry() {
                       </Button>
                     </div>
                   ))}
-                </div>
-
-                {/* ค่าส่งของทั้งออเดอร์ */}
-                <div>
-                  <Label htmlFor="shipping_fee">
-                    ค่าส่ง (บาท) <span className="font-normal text-muted-foreground">(ไม่บังคับ — ลูกค้าโอนมา นับรวมยอดขาย, ใส่ครั้งเดียวต่อออเดอร์)</span>
-                  </Label>
-                  <Input
-                    id="shipping_fee"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="mt-1"
-                    placeholder="เช่น 50"
-                    value={shippingFeeInput}
-                    onChange={e => setShippingFeeInput(e.target.value)}
-                  />
                 </div>
 
                 {/* ยอดรวม cart */}
