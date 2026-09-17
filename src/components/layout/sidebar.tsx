@@ -21,7 +21,8 @@ import {
   ShieldAlert,
   History,
   Wallet,
-  CircleDollarSign
+  CircleDollarSign,
+  Truck
 } from "lucide-react";
 
 interface SidebarProps {
@@ -44,6 +45,7 @@ const menuGroups = [
       { id: "stock-receiving",  label: "รับสินค้าเข้าสต๊อก", icon: PackagePlus },
       { id: "sales-entry",      label: "บันทึกยอดขาย",    icon: ShoppingCart },
       { id: "order-history",    label: "ประวัติการขาย",   icon: History },
+      { id: "shipping",         label: "จัดส่ง",          icon: Truck },
       { id: "stock-inventory",  label: "สต๊อกคงเหลือ",    icon: Package },
       { id: "stock-value",      label: "สรุปมูลค่าสต๊อก",  icon: CircleDollarSign },
       { id: "task-reminder",    label: "Task Reminder",    icon: CheckSquare },

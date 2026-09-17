@@ -18,6 +18,7 @@ const MENU_OPTIONS = [
   { id: 'stock-receiving', label: 'รับสินค้าเข้าสต๊อก' },
   { id: 'sales-entry', label: 'บันทึกยอดขาย' },
   { id: 'order-history', label: 'ประวัติการขาย' },
+  { id: 'shipping', label: 'จัดส่ง' },
   { id: 'stock-inventory', label: 'สต๊อกคงเหลือ' },
   { id: 'stock-value', label: 'สรุปมูลค่าสต๊อก' },
   { id: 'task-reminder', label: 'Task Reminder' },

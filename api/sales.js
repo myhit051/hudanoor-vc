@@ -1,6 +1,8 @@
 import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate } from '../lib/auth-middleware.js';
 
+const SHIPPING_STATUSES = ['pending', 'shipped', 'returned'];
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
@@ -70,6 +72,7 @@ export default async function handler(req, res) {
             total_amount: total,
             note: r.note || '',
             shipping_address: '',
+            shipping_status: '',
             stock_in_id: '',
             order_id: '',
             recorded_by: r.recorded_by || r.import_source || '',
@@ -234,6 +237,27 @@ export default async function handler(req, res) {
       await db.batch(batchOps);
 
       return res.status(201).json({ success: true, count: processed.length });
+    }
+
+    // PATCH /api/sales — อัปเดตสถานะจัดส่ง (หลายออเดอร์พร้อมกันได้)
+    // body: { order_ids: string[], shipping_status: 'pending' | 'shipped' | 'returned' }
+    // ผู้ใช้ที่ล็อกอินแล้วทุกคนอัปเดตได้ (คนแพ็กของไม่จำเป็นต้องเป็นผู้บันทึกขาย)
+    if (req.method === 'PATCH' && req.body?.shipping_status !== undefined) {
+      const authUser = authenticate(req);
+      if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+
+      const { shipping_status, order_ids } = req.body;
+      if (!SHIPPING_STATUSES.includes(shipping_status)) {
+        return res.status(400).json({ error: 'shipping_status ต้องเป็น pending, shipped หรือ returned' });
+      }
+      const ids = [...new Set((Array.isArray(order_ids) ? order_ids : []).map((x) => String(x || '').trim()).filter(Boolean))];
+      if (ids.length === 0) return res.status(400).json({ error: 'กรุณาเลือกออเดอร์อย่างน้อย 1 รายการ' });
+
+      await db.batch(ids.map((oid) => ({
+        sql: 'UPDATE sales_orders SET shipping_status = ? WHERE order_id = ?',
+        args: [shipping_status, oid],
+      })));
+      return res.status(200).json({ success: true, count: ids.length });
     }
 
     // PATCH /api/sales — แก้ไขช่องทางขาย (channel) และ/หรือ ผู้บันทึก (recorded_by) ของออเดอร์ หรือรายการ legacy

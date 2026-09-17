@@ -15,6 +15,7 @@ import { AppSettings } from "@/pages/AppSettings";
 import { StockReceiving } from "@/pages/StockReceiving";
 import { SalesEntry } from "@/pages/SalesEntry";
 import OrderHistory from "@/pages/OrderHistory";
+import { Shipping } from "@/pages/Shipping";
 import { StockInventory } from "@/pages/StockInventory";
 import { StockValue } from "@/pages/StockValue";
 import { AddRecordForm } from "@/components/forms/add-record-form";
@@ -26,6 +27,7 @@ const pathToPage: Record<string, string> = {
   '/stock-receiving': 'stock-receiving',
   '/sales-entry': 'sales-entry',
   '/order-history': 'order-history',
+  '/shipping': 'shipping',
   '/stock-inventory': 'stock-inventory',
   '/stock-value': 'stock-value',
   '/task-reminder': 'task-reminder',
@@ -100,6 +102,8 @@ export function MainLayout() {
         return <SalesEntry />;
       case 'order-history':
         return <OrderHistory />;
+      case 'shipping':
+        return <Shipping />;
       case 'stock-inventory':
         return <StockInventory />;
       case 'stock-value':

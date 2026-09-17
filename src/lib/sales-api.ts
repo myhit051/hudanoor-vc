@@ -30,6 +30,7 @@ export interface SalesOrder {
   total_amount: number;
   note: string;
   shipping_address?: string;
+  shipping_status?: ShippingStatus | '';
   stock_in_id: string;
   order_id: string;
   recorded_by: string;
@@ -38,6 +39,8 @@ export interface SalesOrder {
   import_source?: string;
   cost_price?: number;
 }
+
+export type ShippingStatus = 'pending' | 'shipped' | 'returned';
 
 export interface OrderSummary {
   order_id: string;
@@ -50,12 +53,13 @@ export interface OrderSummary {
   total_quantity: number;
   total_amount: number;
   shipping_address?: string;
+  shipping_status: ShippingStatus;
   is_legacy: boolean;
   import_source?: string;
   items: SalesOrder[];
 }
 
-export type NewSalesOrder = Omit<SalesOrder, 'id' | 'created_at' | 'discount_amount' | 'final_unit_price' | 'total_amount' | 'order_id' | 'recorded_by'>;
+export type NewSalesOrder = Omit<SalesOrder, 'id' | 'created_at' | 'discount_amount' | 'final_unit_price' | 'shipping_status' | 'total_amount' | 'order_id' | 'recorded_by'>;
 
 export async function getSalesOrders(params?: {
   date?: string;
@@ -159,6 +163,21 @@ export async function updateOrderRecordedBy(params: {
   }
 }
 
+export async function updateShippingStatus(params: {
+  order_ids: string[];
+  shipping_status: ShippingStatus;
+}): Promise<void> {
+  const res = await fetch(`${API_BASE}/sales`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to update shipping status');
+  }
+}
+
 export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
   const groups: Record<string, OrderSummary> = {};
 
@@ -178,6 +197,7 @@ export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
         total_quantity: 0,
         total_amount: 0,
         shipping_address: sale.shipping_address || '',
+        shipping_status: (sale.shipping_status || 'pending') as ShippingStatus,
         is_legacy: !!sale.is_legacy,
         import_source: sale.import_source,
         items: []
