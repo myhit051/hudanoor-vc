@@ -41,7 +41,7 @@ export interface SalesOrder {
   cost_price?: number;
 }
 
-export type ShippingStatus = 'pending' | 'shipped' | 'returned';
+export type ShippingStatus = 'pending' | 'preparing' | 'shipped' | 'returned';
 /** transfer = ลูกค้าโอนแล้ว, cod = เก็บเงินปลายทาง (ยอดที่ต้องเก็บ = total_amount ของออเดอร์) */
 export type PaymentMethod = 'transfer' | 'cod';
 

@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
-  Truck, Search, Printer, MapPin, Clock, CheckCircle2, Undo2, ChevronDown, AlertTriangle, Loader2, PackageOpen, HandCoins
+  Truck, Search, Printer, MapPin, Clock, CheckCircle2, Undo2, ChevronDown, AlertTriangle, Loader2, PackageOpen, PackageCheck, HandCoins
 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { getSalesOrders, groupSalesByOrder, updateShippingStatus, OrderSummary, ShippingStatus } from "@/lib/sales-api";
@@ -37,6 +37,11 @@ const STATUS_META: Record<ShippingStatus, { label: string; icon: typeof Clock; c
     label: 'รอส่ง',
     icon: Clock,
     className: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800'
+  },
+  preparing: {
+    label: 'เตรียมจัดส่ง',
+    icon: PackageCheck,
+    className: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-800'
   },
   shipped: {
     label: 'ส่งแล้ว',
@@ -256,7 +261,7 @@ export function Shipping() {
   }, [orders, search, addressOnly]);
 
   const counts = useMemo(() => {
-    const c: Record<ShippingStatus | 'all', number> = { all: searched.length, pending: 0, shipped: 0, returned: 0 };
+    const c: Record<ShippingStatus | 'all', number> = { all: searched.length, pending: 0, preparing: 0, shipped: 0, returned: 0 };
     for (const o of searched) c[o.shipping_status] += 1;
     return c;
   }, [searched]);
@@ -313,9 +318,28 @@ export function Shipping() {
       }
 
       pdf.save(`ใบปะหน้า-${toLocalDateStr(new Date())}-${printable.length}ออเดอร์.pdf`);
+
+      // พิมพ์ใบปะหน้าแล้ว → เลื่อนสถานะ "รอส่ง" เป็น "เตรียมจัดส่ง" อัตโนมัติ (ส่งแล้ว/ตีกลับ ไม่แตะ)
+      const toPrepare = printable.filter(o => o.shipping_status === 'pending').map(o => o.order_id);
+      let statusNote = '';
+      if (toPrepare.length > 0) {
+        try {
+          await updateShippingStatus({ order_ids: toPrepare, shipping_status: 'preparing' });
+          queryClient.invalidateQueries({ queryKey: ['sales'] });
+          setSelected(prev => prev.filter(id => !toPrepare.includes(id)));
+          statusNote = `เปลี่ยน ${toPrepare.length} ออเดอร์เป็น "เตรียมจัดส่ง" แล้ว`;
+        } catch (e) {
+          console.error("Auto status update failed:", e);
+          statusNote = 'แต่เปลี่ยนสถานะเป็น "เตรียมจัดส่ง" ไม่สำเร็จ กรุณาเปลี่ยนเอง';
+        }
+      }
       toast({
         title: `สร้างไฟล์ PDF แล้ว (${printable.length} ใบ)`,
-        description: skipped > 0 ? `ข้าม ${skipped} ออเดอร์ที่ยังไม่มีที่อยู่จัดส่ง` : 'ส่งของแล้วอย่าลืมเปลี่ยนสถานะเป็น "ส่งแล้ว"'
+        description: [
+          statusNote,
+          skipped > 0 ? `ข้าม ${skipped} ออเดอร์ที่ยังไม่มีที่อยู่จัดส่ง` : '',
+          'ส่งของแล้วอย่าลืมเปลี่ยนสถานะเป็น "ส่งแล้ว"'
+        ].filter(Boolean).join(' · ')
       });
     } catch (e) {
       console.error("PDF export failed:", e);

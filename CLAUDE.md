@@ -52,7 +52,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - เลขออเดอร์ `ORD-YYYYMMDD-NNN` จองผ่านตาราง `order_counters` (atomic, ไม่ลดลงเมื่อลบ) — **ห้ามกลับไปใช้ COUNT+1** (เคยทำเลขซ้ำ)
 - `total_amount` ของแถว = ราคาสุทธิ×จำนวน (+ `shipping_fee` เฉพาะแถวแรกของออเดอร์) → ทุกหน้ารวมยอดจาก `total_amount`
 - ค่าส่ง (`shipping_fee`) = **ต่อออเดอร์** ใส่ครั้งเดียว เซิร์ฟเวอร์ใช้ค่าจาก `items[0]` เท่านั้น · นับเป็นยอดขาย แต่ **ไม่นับเป็นกำไร** (หักออกใน `OrderHistory.tsx`)
-- `shipping_status`: `pending` (รอส่ง) | `shipped` (ส่งแล้ว) | `returned` (ตีกลับ) — อัปเดตทั้งออเดอร์ด้วย `PATCH /api/sales {order_ids, shipping_status}` (ใครล็อกอินก็ทำได้)
+- `shipping_status`: `pending` (รอส่ง) | `preparing` (เตรียมจัดส่ง — ตั้งอัตโนมัติเมื่อพิมพ์ใบปะหน้า เฉพาะออเดอร์ที่ยัง `pending`) | `shipped` (ส่งแล้ว) | `returned` (ตีกลับ) — อัปเดตทั้งออเดอร์ด้วย `PATCH /api/sales {order_ids, shipping_status}` (ใครล็อกอินก็ทำได้)
 - `payment_method`: `transfer` | `cod` — COD ได้เฉพาะ `channel = 'online'` · ยอดเก็บ COD = total ของออเดอร์ (รวมค่าส่ง) · ย้ายเป็นหน้าร้านแล้วรีเซ็ตเป็น transfer และล้างที่อยู่
 - `shipping_address` เก็บเฉพาะออนไลน์ · ออเดอร์เก่า (ก่อน 17 ก.ย. 2026) ไม่มีที่อยู่ และสถานะเริ่มต้นเป็น "รอส่ง" ทั้งหมด
 - `legacy_sales` = ข้อมูลเก่าจาก Sheet/รายรับ manual — ไม่มี order_id, ไม่มีสถานะจัดส่ง, ถูกกรองออกจากหน้าจัดส่ง
