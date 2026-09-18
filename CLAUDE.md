@@ -89,6 +89,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - CSS มือถือใน `src/index.css` บังคับ `button` สูง/กว้างขั้นต่ำ 44px → Checkbox/Switch บวม ต้องใส่ `className="min-h-0 min-w-0"`
 - ฟิลด์ที่อยู่ใน section ที่แสดงแบบมีเงื่อนไข (`cart.length > 0`) จะโผล่หลังเพิ่มสินค้าแล้วเท่านั้น — ค่าส่งตั้งใจไว้ตรงนั้นตามที่บอสขอ ฟิลด์ระดับออเดอร์อื่นให้แสดงตลอด
 - Vercel ฟรีจำกัดจำนวน deploy ต่อวัน — push ถี่ ๆ แล้วเว็บไม่อัปเดต ให้เช็ค `gh api repos/myhit051/hudanoor-vc/commits/<sha>/statuses` ถ้าขึ้น "Deployment rate limited" ต้องรอแล้ว push ใหม่ (Vercel ไม่ลองซ้ำเอง) · check `build-and-deploy` (GitHub Pages) fail ทุกครั้งอยู่แล้ว ไม่เกี่ยว
+- 18 ก.ย. 2026 เว็บตอบ 403 "Vercel Security Checkpoint" กับ curl/Chrome headless จาก VPS นี้ → เช็ค asset ไม่ได้ ให้ใช้สถานะ deploy จาก `gh api .../commits/<sha>/statuses` ("Deployment has completed") แทน
 - ตัวเช็คว่า deploy เสร็จ: หา asset `index-*.js` จากหน้าเว็บแล้ว grep ข้อความใหม่ในไฟล์นั้น (รอ ~1–3 นาที)
 - เปิดหน้าเว็บที่ `localhost` แอปจะยิง API ไป `http://localhost:3000/api` → ทดสอบด้วย `vite preview --host 127.0.0.1` (จะใช้ `/api` ปกติ แล้ว mock ด้วย route)
 
