@@ -58,6 +58,8 @@ export function SalesEntry() {
   const [branchOrPlatform, setBranchOrPlatform] = useState('');
   const [shippingAddress, setShippingAddress] = useState('');
   const [shippingFeeInput, setShippingFeeInput] = useState('');
+  // กด "บันทึกเสร็จสิ้น" แล้วพับฟอร์มเก็บ เหลือปุ่มเปิดฟอร์มใหม่
+  const [formOpen, setFormOpen] = useState(true);
   // เก็บเงินปลายทาง — เฉพาะออเดอร์ออนไลน์
   const [isCod, setIsCod] = useState(false);
   const [itemForm, setItemForm] = useState(emptyItemForm);
@@ -217,7 +219,7 @@ export function SalesEntry() {
     });
   };
 
-  const handleSaveAndClear = () => {
+  const handleSaveAndClose = () => {
     if (!validateAndSave()) return;
     addSales(buildOrders(), {
       onSuccess: () => {
@@ -229,6 +231,8 @@ export function SalesEntry() {
         setShippingFeeInput('');
         setIsCod(false);
         setRecorderOverride('');
+        setFormOpen(false);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
     });
   };
@@ -273,7 +277,20 @@ export function SalesEntry() {
               กรอกข้อมูลการขาย
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 pt-5">
+          {!formOpen && (
+            <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+              <PackageCheck className="h-10 w-10 text-emerald-500" />
+              <p className="text-sm text-muted-foreground">บันทึกเรียบร้อยแล้ว</p>
+              <Button
+                className="bg-gradient-to-r from-rose-500 to-pink-500 text-white"
+                onClick={() => setFormOpen(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                บันทึกออเดอร์ใหม่
+              </Button>
+            </CardContent>
+          )}
+          <CardContent className={cn("space-y-4 pt-5", !formOpen && "hidden")}>
 
             {/* วันที่ + ช่องทาง + สาขา (ใช้ร่วมทั้ง transaction) */}
             <div>
@@ -647,14 +664,14 @@ export function SalesEntry() {
                     variant="outline"
                     className="flex-1 border-rose-400 text-rose-500 hover:bg-rose-50"
                     disabled={isAddingBatch}
-                    onClick={handleSaveAndClear}
+                    onClick={handleSaveAndClose}
                   >
-                    บันทึกและล้างทั้งหมด
+                    บันทึกเสร็จสิ้น
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   <span className="font-medium">ออเดอร์ถัดไป</span> = คงวันที่ ช่องทาง สาขา และผู้บันทึกไว้ ล้างเฉพาะสินค้า ค่าส่ง และที่อยู่ ·{' '}
-                  <span className="font-medium">ล้างทั้งหมด</span> = เริ่มฟอร์มใหม่
+                  <span className="font-medium">บันทึกเสร็จสิ้น</span> = บันทึกแล้วปิดฟอร์ม
                 </p>
               </div>
             )}
