@@ -8,8 +8,9 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSales } from '@/hooks/use-sales';
 import { useUsers } from '@/hooks/use-users';
-import { groupSalesByOrder } from '@/lib/sales-api';
-import { Search, History, Trash2, Loader2, PackageCheck, TrendingUp, ShoppingCart, Package, Store, Globe2, DollarSign, TrendingDown } from 'lucide-react';
+import { groupSalesByOrder, OrderSummary } from '@/lib/sales-api';
+import { EditOrderItemsDialog } from '@/components/sales/edit-order-items-dialog';
+import { Search, History, Trash2, Pencil, Loader2, PackageCheck, TrendingUp, ShoppingCart, Package, Store, Globe2, DollarSign, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -130,6 +131,8 @@ export function OrderHistory() {
   }, [salesOrders, searchQuery, channelFilter, recordedByFilter]);
 
   const groupedOrders = useMemo(() => groupSalesByOrder(filteredSales), [filteredSales]);
+  // ออเดอร์ที่กำลังแก้ไขสินค้า (เปิดหน้าต่างแก้ไข)
+  const [editingOrder, setEditingOrder] = useState<OrderSummary | null>(null);
 
   // Calculate Summary KPIs
   const summary = useMemo(() => {
@@ -631,6 +634,18 @@ export function OrderHistory() {
                                 </Select>
                               </div>
                             </div>
+                            <div className="flex gap-2 sm:ml-auto">
+                            {!group.is_legacy && group.order_id && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-xs"
+                                onClick={() => setEditingOrder(group)}
+                              >
+                                <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                                แก้ไขสินค้า
+                              </Button>
+                            )}
                             <Button
                               variant="destructive"
                               size="sm"
@@ -641,6 +656,7 @@ export function OrderHistory() {
                               <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                               ลบออเดอร์
                             </Button>
+                            </div>
                           </div>
                         );
                       })()}
@@ -652,6 +668,14 @@ export function OrderHistory() {
           )}
         </CardContent>
       </Card>
+
+      {editingOrder && (
+        <EditOrderItemsDialog
+          key={editingOrder.order_id}
+          order={editingOrder}
+          onOpenChange={open => { if (!open) setEditingOrder(null); }}
+        />
+      )}
     </div>
   );
 }

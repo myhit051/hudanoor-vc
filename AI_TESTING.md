@@ -46,3 +46,8 @@ console.log(await call('POST', { body: [{ date: '2026-09-17', channel: 'online',
   5. ดาวน์โหลด PDF ด้วย `page.waitForEvent('download')` แล้วดูผลด้วย `pdfinfo` / `pdftoppm -r 80 -png x.pdf out` และเปิดภาพดู
   6. เสร็จแล้ว `fuser -k 4179/tcp`
 - ตัวเลือกที่ใช้บ่อย: combobox ลำดับที่ 0 = ผู้บันทึก (เฉพาะ admin) แล้วต่อด้วย ช่องทาง, สาขา · `#shipping_fee`, `#shipping_address`, `#is_cod`, `#recorder`, `#quantity`, `#note`
+
+## 3) ทดสอบหน้าเว็บกับ API จริง + SQLite (แนะนำเมื่อแก้ทั้ง API และหน้าเว็บ)
+ใน `ctx.route('**/api/**')` เรียก handler จริง (`api/sales.js`, `api/stock.js`) ด้วย req/res ปลอมแบบข้อ 1 แล้ว `r.fulfill({ status, json })`
+— หน้าเว็บคุยกับตรรกะเซิร์ฟเวอร์จริงบน `file:/tmp/xxx.db` · token ใน localStorage ต้องเป็น `signToken(...)` จริง · `/api/auth` และ `/api/settings` ยัง mock ได้
+ตัวอย่างเต็ม: แก้ออเดอร์ผ่านหน้าต่างแล้วตรวจแถวใน DB + หน้า `/stock-movements` (เคยใช้ใน `/tmp/e2e.mjs` — เขียนใหม่ตามแบบนี้)

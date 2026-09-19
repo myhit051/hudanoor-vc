@@ -25,12 +25,12 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 ## ไฟล์เสริม (อ่านเมื่อจำเป็น)
 - `AI_HISTORY.md` — ประวัติคำขอของบอสทีละเรื่อง + เหตุผลของการตัดสินใจ → อ่านก่อนแก้ฟีเจอร์ขาย/จัดส่ง/ค่าส่ง/COD
 - `AI_TESTING.md` — วิธีทดสอบ API กับ SQLite จำลอง และทดสอบหน้าเว็บด้วย Playwright + API ปลอม → อ่านก่อนทดสอบทุกครั้ง
-- `openspec/changes/*` — ข้อเสนอฟีเจอร์ (ล่าสุด `add-shipping-management`) → อัปเดตเมื่อเพิ่มฟีเจอร์ใหญ่
+- `openspec/changes/*` — ข้อเสนอฟีเจอร์ (ล่าสุด `add-stock-movements`) → อัปเดตเมื่อเพิ่มฟีเจอร์ใหญ่
 
 ## ลิงก์สำคัญ
 - https://hudanoor-vc.vercel.app — เว็บจริง (Vercel)
   - `/sales-entry` บันทึกยอดขาย · `/order-history` ประวัติการขาย+กำไร · `/shipping` จัดส่ง/พิมพ์ใบปะหน้า
-  - `/stock-receiving` รับของ · `/stock-inventory` สต๊อกคงเหลือ · `/stock-value` มูลค่าสต๊อก · `/employees` · `/payroll` (admin) · `/settings`
+  - `/stock-receiving` รับของ · `/stock-inventory` สต๊อกคงเหลือ · `/stock-value` มูลค่าสต๊อก · `/stock-movements` ความเคลื่อนไหวสต๊อก · `/employees` · `/payroll` (admin) · `/settings`
   - `/api/*` = Vercel serverless functions ในโฟลเดอร์ `api/`
 - https://github.com/myhit051/hudanoor-vc — repo (branch `main`) **push แล้ว Vercel deploy เองอัตโนมัติ** ไม่ต้องใช้ azhub-publish / pm2
 
@@ -55,6 +55,9 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `shipping_status`: `pending` (รอส่ง) | `preparing` (เตรียมจัดส่ง — ตั้งอัตโนมัติเมื่อพิมพ์ใบปะหน้า เฉพาะออเดอร์ที่ยัง `pending`) | `shipped` (ส่งแล้ว) | `returned` (ตีกลับ) — อัปเดตทั้งออเดอร์ด้วย `PATCH /api/sales {order_ids, shipping_status}` (ใครล็อกอินก็ทำได้)
 - `payment_method`: `transfer` | `cod` — COD ได้เฉพาะ `channel = 'online'` · ยอดเก็บ COD = total ของออเดอร์ (รวมค่าส่ง) · ย้ายเป็นหน้าร้านแล้วรีเซ็ตเป็น transfer และล้างที่อยู่
 - `shipping_address` เก็บเฉพาะออนไลน์ · ออเดอร์เก่า (ก่อน 17 ก.ย. 2026) ไม่มีที่อยู่ และสถานะเริ่มต้นเป็น "รอส่ง" ทั้งหมด
+- `stock_movements` = **ประวัติ**ความเคลื่อนไหวสต๊อก (ไม่ใช่ตัวคำนวณคงเหลือ — คงเหลือยังเป็น `stock_in − sales_orders`) · ทุก API ที่เพิ่ม/แก้/ลบ `stock_in` หรือ `sales_orders` **ต้อง** ใส่ `movementStmt()` (`lib/stock-movements.js`) ใน `db.batch` เดียวกัน · ประวัติแก้/ลบเริ่ม 19 ก.ย. 2026
+- แก้สินค้าในออเดอร์ = `PUT /api/sales?order_id=` (Admin/ผู้บันทึก) ลบแถวเดิมแล้วสร้างใหม่ คง order_id วันที่ ช่องทาง ที่อยู่ COD สถานะจัดส่ง ผู้บันทึก created_at · หน้าต่าง `EditOrderItemsDialog` ในหน้าประวัติการขาย
+- ตารางสินค้าในออเดอร์ใช้ร่วมกันที่ `src/components/sales/order-items-editor.tsx` (หน้าบันทึกยอดขาย + หน้าต่างแก้ไข)
 - `legacy_sales` = ข้อมูลเก่าจาก Sheet/รายรับ manual — ไม่มี order_id, ไม่มีสถานะจัดส่ง, ถูกกรองออกจากหน้าจัดส่ง
 
 ## กติกาที่ตกลงกับบอสแล้ว (อย่าเปลี่ยนเองโดยไม่ถาม)

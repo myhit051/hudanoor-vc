@@ -1,5 +1,6 @@
 import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate } from '../lib/auth-middleware.js';
+import { movementStmt, MOVEMENT_TYPES } from '../lib/stock-movements.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -15,6 +16,29 @@ export default async function handler(req, res) {
     // GET /api/stock — ดึงรายการสต๊อก
     if (req.method === 'GET') {
       const { date, sku, available, view, limit = 500, offset = 0 } = req.query;
+
+      // view=movements — ประวัติความเคลื่อนไหวสต๊อก เรียงล่าสุดก่อน (มีชื่อคนบันทึก/เลขออเดอร์ ต้องล็อกอิน)
+      // from/to = เวลา ISO (หน้าเว็บแปลงวันที่ไทยให้แล้ว) · q = ค้นรหัส/ชื่อสินค้า/เลขออเดอร์ · type = in|sale|edit|delete
+      if (view === 'movements') {
+        if (!authenticate(req)) return res.status(401).json({ error: 'Unauthorized' });
+        const { from, to, q, type } = req.query;
+        let sql = 'SELECT * FROM stock_movements WHERE 1=1';
+        const args = [];
+        if (from) { sql += ' AND created_at >= ?'; args.push(String(from)); }
+        if (to) { sql += ' AND created_at < ?'; args.push(String(to)); }
+        if (q) {
+          sql += ' AND (sku LIKE ? OR product_name LIKE ? OR order_id LIKE ?)';
+          const like = `%${String(q).trim()}%`;
+          args.push(like, like, like);
+        }
+        const typeGroups = { in: ['in'], sale: ['sale'], edit: ['in_edit', 'sale_edit'], delete: ['in_delete', 'sale_delete'] };
+        const types = typeGroups[type] || (MOVEMENT_TYPES.includes(type) ? [type] : null);
+        if (types) { sql += ` AND type IN (${types.map(() => '?').join(',')})`; args.push(...types); }
+        sql += ' ORDER BY created_at DESC, id DESC LIMIT ?';
+        args.push(Math.min(Number(limit) || 500, 2000));
+        const result = await db.execute({ sql, args });
+        return res.status(200).json({ data: result.rows });
+      }
 
       // view=inventory — คืน aggregated สต๊อกคงเหลือ
       if (view === 'inventory') {
@@ -191,18 +215,24 @@ export default async function handler(req, res) {
       const id = `stock_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const now = new Date().toISOString();
 
-      await db.execute({
-        sql: `INSERT INTO stock_in (id, date, sku, product_name, product_category, color, size, quantity, cost_price, sell_price, note, image_url, recorded_by, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [
-          id, date, sku, product_name, product_category || '',
-          color || '', size || '',
-          Number(quantity) || 1,
-          Number(cost_price) || 0,
-          Number(sell_price) || 0,
-          note || '', image_url || '', recordedBy, now, now
-        ]
-      });
+      await db.batch([
+        {
+          sql: `INSERT INTO stock_in (id, date, sku, product_name, product_category, color, size, quantity, cost_price, sell_price, note, image_url, recorded_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            id, date, sku, product_name, product_category || '',
+            color || '', size || '',
+            Number(quantity) || 1,
+            Number(cost_price) || 0,
+            Number(sell_price) || 0,
+            note || '', image_url || '', recordedBy, now, now
+          ]
+        },
+        movementStmt({
+          type: 'in', sku, product_name, color, size, qty_change: Number(quantity) || 1,
+          stock_in_id: id, detail: 'รับเข้า', recorded_by: recordedBy, created_at: now
+        })
+      ], 'write');
 
       return res.status(201).json({ success: true, id });
     }
@@ -214,6 +244,11 @@ export default async function handler(req, res) {
 
       const { quantity, cost_price, sell_price, note, product_name, product_category, date, image_url } = req.body;
       const now = new Date().toISOString();
+      const authUser = authenticate(req);
+
+      const oldResult = await db.execute({ sql: 'SELECT * FROM stock_in WHERE id = ?', args: [id] });
+      const oldLot = oldResult.rows[0];
+      if (!oldLot) return res.status(404).json({ error: 'ไม่พบล็อตสินค้านี้' });
 
       // ตรวจสอบว่าปริมาณไม่ต่ำกว่าที่ขายไปแล้ว
       if (quantity !== undefined) {
@@ -243,7 +278,17 @@ export default async function handler(req, res) {
       fields.push('updated_at = ?');
       args.push(now, id);
 
-      await db.execute({ sql: `UPDATE stock_in SET ${fields.join(', ')} WHERE id = ?`, args });
+      const ops = [{ sql: `UPDATE stock_in SET ${fields.join(', ')} WHERE id = ?`, args }];
+      const qtyDiff = quantity !== undefined ? Number(quantity) - Number(oldLot.quantity) : 0;
+      if (qtyDiff !== 0) {
+        ops.push(movementStmt({
+          type: 'in_edit', sku: oldLot.sku, product_name: product_name ?? oldLot.product_name,
+          color: oldLot.color, size: oldLot.size, qty_change: qtyDiff, stock_in_id: id,
+          detail: `แก้จำนวนรับเข้า ${Number(oldLot.quantity)} → ${Number(quantity)}`,
+          recorded_by: authUser?.name || '', created_at: now
+        }));
+      }
+      await db.batch(ops, 'write');
       return res.status(200).json({ success: true });
     }
 
@@ -252,7 +297,18 @@ export default async function handler(req, res) {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'Missing id' });
 
-      await db.execute({ sql: 'DELETE FROM stock_in WHERE id = ?', args: [id] });
+      const authUser = authenticate(req);
+      const lotResult = await db.execute({ sql: 'SELECT * FROM stock_in WHERE id = ?', args: [id] });
+      const lot = lotResult.rows[0];
+      const ops = [{ sql: 'DELETE FROM stock_in WHERE id = ?', args: [id] }];
+      if (lot) {
+        ops.push(movementStmt({
+          type: 'in_delete', sku: lot.sku, product_name: lot.product_name, color: lot.color, size: lot.size,
+          qty_change: -Number(lot.quantity || 0), stock_in_id: id,
+          detail: `ลบล็อตรับเข้า (วันที่รับ ${lot.date})`, recorded_by: authUser?.name || ''
+        }));
+      }
+      await db.batch(ops, 'write');
       return res.status(200).json({ success: true });
     }
 

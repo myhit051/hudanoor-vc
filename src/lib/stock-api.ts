@@ -110,6 +110,38 @@ export async function getStockLots(): Promise<StockLotItem[]> {
   return data.data as StockLotItem[];
 }
 
+/** ประวัติความเคลื่อนไหวสต๊อก — qty_change: + สต๊อกเพิ่ม, − สต๊อกลด */
+export type StockMovementType = 'in' | 'in_edit' | 'in_delete' | 'sale' | 'sale_edit' | 'sale_delete';
+
+export interface StockMovement {
+  id: string;
+  created_at: string;
+  type: StockMovementType;
+  sku: string;
+  product_name: string;
+  color: string;
+  size: string;
+  qty_change: number;
+  stock_in_id: string;
+  order_id: string;
+  detail: string;
+  recorded_by: string;
+}
+
+/** from/to = เวลา ISO · type = in | sale | edit | delete (กลุ่ม) */
+export async function getStockMovements(params: { from?: string; to?: string; q?: string; type?: string; limit?: number }): Promise<StockMovement[]> {
+  const query = new URLSearchParams({ view: 'movements' });
+  if (params.from) query.set('from', params.from);
+  if (params.to) query.set('to', params.to);
+  if (params.q) query.set('q', params.q);
+  if (params.type) query.set('type', params.type);
+  if (params.limit) query.set('limit', String(params.limit));
+  const res = await fetch(`${API_BASE}/stock?${query}`, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error('โหลดประวัติสต๊อกไม่สำเร็จ');
+  const data = await res.json();
+  return data.data as StockMovement[];
+}
+
 export async function getAvailableStock(): Promise<AvailableStockItem[]> {
   const res = await fetch(`${API_BASE}/stock?available=true`, {
     headers: getAuthHeaders()

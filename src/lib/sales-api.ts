@@ -187,6 +187,33 @@ export async function updateShippingStatus(params: {
   }
 }
 
+/** 1 รายการสินค้าเมื่อแก้ไขออเดอร์เดิม (PUT /api/sales?order_id=) */
+export interface EditOrderItem {
+  stock_in_id: string;
+  sku: string;
+  product_name: string;
+  color: string;
+  size: string;
+  quantity: number;
+  unit_price: number;
+  discount_type: 'amount' | 'percent';
+  discount_value: number;
+  note: string;
+}
+
+/** แก้ไขสินค้าในออเดอร์เดิม — เลขออเดอร์/วันที่/ที่อยู่/COD/สถานะจัดส่ง/ผู้บันทึกคงเดิม สต๊อกปรับตามให้เอง */
+export async function updateOrderItems(params: { order_id: string; items: EditOrderItem[]; shipping_fee: number }): Promise<void> {
+  const res = await fetch(`${API_BASE}/sales?order_id=${encodeURIComponent(params.order_id)}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ items: params.items, shipping_fee: params.shipping_fee })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'แก้ไขออเดอร์ไม่สำเร็จ');
+  }
+}
+
 export function groupSalesByOrder(sales: SalesOrder[]): OrderSummary[] {
   const groups: Record<string, OrderSummary> = {};
 

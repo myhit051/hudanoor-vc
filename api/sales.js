@@ -1,11 +1,12 @@
 import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate } from '../lib/auth-middleware.js';
+import { movementStmt } from '../lib/stock-movements.js';
 
 const SHIPPING_STATUSES = ['pending', 'preparing', 'shipped', 'returned'];
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -271,10 +272,143 @@ export default async function handler(req, res) {
             p.stock_in_id, orderId, orderRecordedBy, now
           ]
         });
+        batchOps.push(movementStmt({
+          type: 'sale', sku: p.sku, product_name: p.product_name, color: p.color, size: p.size,
+          qty_change: -p.qty, stock_in_id: p.stock_in_id, order_id: orderId,
+          detail: 'ขายออก', recorded_by: orderRecordedBy, created_at: now
+        }));
       }
-      await db.batch(batchOps);
+      await db.batch(batchOps, 'write');
 
       return res.status(201).json({ success: true, count: processed.length });
+    }
+
+    // PUT /api/sales?order_id=ORD-... — แก้ไขสินค้าในออเดอร์เดิม (เปลี่ยนสินค้า/จำนวน/ราคา/ส่วนลด/ลบบางรายการ/ค่าส่ง)
+    // body: { items: [{ stock_in_id, quantity, unit_price, discount_type, discount_value, note, sku?, product_name?, color?, size? }], shipping_fee? }
+    // เลขออเดอร์ วันที่ ช่องทาง ที่อยู่ COD สถานะจัดส่ง ผู้บันทึก คงเดิม · สต๊อกปรับตามเอง + บันทึกความเคลื่อนไหว
+    if (req.method === 'PUT') {
+      const authUser = authenticate(req);
+      if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+
+      const orderId = String(req.query.order_id || req.body?.order_id || '').trim();
+      if (!orderId) return res.status(400).json({ error: 'Missing order_id' });
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      if (items.length === 0) {
+        return res.status(400).json({ error: 'ออเดอร์ต้องมีสินค้าอย่างน้อย 1 รายการ (ถ้าจะยกเลิกทั้งออเดอร์ให้ใช้ลบออเดอร์)' });
+      }
+
+      const oldResult = await db.execute({
+        sql: 'SELECT * FROM sales_orders WHERE order_id = ? ORDER BY created_at ASC, rowid ASC',
+        args: [orderId],
+      });
+      const oldRows = oldResult.rows;
+      if (oldRows.length === 0) return res.status(404).json({ error: 'ไม่พบออเดอร์' });
+      const head = oldRows[0];
+      if (authUser.role !== 'admin' && authUser.name !== head.recorded_by) {
+        return res.status(403).json({ error: 'ไม่มีสิทธิ์แก้ไขออเดอร์นี้ (แก้ได้เฉพาะ Admin หรือผู้บันทึก)' });
+      }
+
+      const oldShippingFee = oldRows.reduce((sum, r) => sum + (Number(r.shipping_fee) || 0), 0);
+      const shippingFee = req.body.shipping_fee !== undefined
+        ? Math.max(0, Number(req.body.shipping_fee) || 0)
+        : oldShippingFee;
+
+      // ข้อมูลสินค้าเอาจากล็อตในสต๊อก (ถ้าล็อตถูกลบไปแล้วใช้ข้อมูลเดิมในออเดอร์/ที่ส่งมา)
+      const lotIds = [...new Set(items.map((i) => String(i.stock_in_id || '')).filter(Boolean))];
+      const lotMap = new Map();
+      if (lotIds.length > 0) {
+        const lotRes = await db.execute({
+          sql: `SELECT id, sku, product_name, product_category, color, size FROM stock_in WHERE id IN (${lotIds.map(() => '?').join(',')})`,
+          args: lotIds,
+        });
+        for (const r of lotRes.rows) lotMap.set(r.id, r);
+      }
+      const oldBySid = new Map(oldRows.map((r) => [r.stock_in_id, r]));
+
+      const processed = [];
+      for (const [index, item] of items.entries()) {
+        const sid = String(item.stock_in_id || '');
+        const info = lotMap.get(sid) || oldBySid.get(sid) || item;
+        const qty = Math.floor(Number(item.quantity));
+        if (!sid || !info.sku || !info.product_name) {
+          return res.status(400).json({ error: 'ข้อมูลสินค้าไม่ครบ (ต้องมีล็อตสินค้า)' });
+        }
+        if (!(qty >= 1)) return res.status(400).json({ error: `จำนวนของ ${info.sku} ต้องอย่างน้อย 1 ชิ้น` });
+
+        const price = Math.max(0, Number(item.unit_price) || 0);
+        const discType = item.discount_type === 'percent' ? 'percent' : 'amount';
+        const discVal = Math.max(0, Number(item.discount_value) || 0);
+        const discountAmount = discType === 'percent' ? price * (discVal / 100) : discVal;
+        const finalUnitPrice = Math.max(0, price - discountAmount);
+        const rowShipping = index === 0 ? shippingFee : 0;
+        processed.push({
+          sid, qty, price, discType, discVal, discountAmount, finalUnitPrice, rowShipping,
+          totalAmount: finalUnitPrice * qty + rowShipping,
+          sku: info.sku, product_name: info.product_name,
+          product_category: info.product_category || '', color: info.color || '', size: info.size || '',
+          note: item.note || '',
+        });
+      }
+
+      // สต๊อก: เทียบจำนวนเดิม/ใหม่ต่อล็อต — ต้องเช็คเฉพาะล็อตที่ใช้เพิ่มขึ้น
+      const oldQty = new Map();
+      for (const r of oldRows) oldQty.set(r.stock_in_id, (oldQty.get(r.stock_in_id) || 0) + Number(r.quantity || 0));
+      const newQty = new Map();
+      for (const p of processed) newQty.set(p.sid, (newQty.get(p.sid) || 0) + p.qty);
+      for (const [sid, need] of newQty) {
+        const extra = need - (oldQty.get(sid) || 0);
+        if (extra <= 0) continue;
+        const stockCheck = await db.execute({
+          sql: `SELECT s.quantity - COALESCE(SUM(so.quantity), 0) AS available
+                FROM stock_in s LEFT JOIN sales_orders so ON s.id = so.stock_in_id
+                WHERE s.id = ? GROUP BY s.id`,
+          args: [sid],
+        });
+        const available = Number(stockCheck.rows[0]?.available ?? 0);
+        if (available < extra) {
+          const p = processed.find((x) => x.sid === sid);
+          return res.status(400).json({ error: `สต๊อก ${p?.sku || sid} ไม่พอ (เหลือ ${available} ชิ้น ต้องการเพิ่ม ${extra} ชิ้น)` });
+        }
+      }
+
+      const now = new Date().toISOString();
+      const ops = [{ sql: 'DELETE FROM sales_orders WHERE order_id = ?', args: [orderId] }];
+      for (const p of processed) {
+        ops.push({
+          sql: `INSERT INTO sales_orders
+                  (id, date, channel, branch_or_platform, sku, product_name, product_category,
+                   color, size, quantity, unit_price, discount_type, discount_value, discount_amount,
+                   final_unit_price, shipping_fee, total_amount, note, shipping_address, payment_method,
+                   shipping_status, stock_in_id, order_id, recorded_by, created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          args: [
+            `sale_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            head.date, head.channel || '', head.branch_or_platform || '',
+            p.sku, p.product_name, p.product_category, p.color, p.size,
+            p.qty, p.price, p.discType, p.discVal, p.discountAmount,
+            p.finalUnitPrice, p.rowShipping, p.totalAmount, p.note,
+            head.shipping_address || '', head.payment_method || 'transfer',
+            head.shipping_status || 'pending', p.sid, orderId, head.recorded_by || '', head.created_at,
+          ],
+        });
+      }
+      // ประวัติ: 1 แถวต่อล็อตที่จำนวนเปลี่ยน (+ = คืนสต๊อก, − = ใช้สต๊อกเพิ่ม)
+      for (const sid of new Set([...oldQty.keys(), ...newQty.keys()])) {
+        const before = oldQty.get(sid) || 0;
+        const after = newQty.get(sid) || 0;
+        if (before === after) continue;
+        const info = processed.find((p) => p.sid === sid) || oldBySid.get(sid) || {};
+        ops.push(movementStmt({
+          type: 'sale_edit', sku: info.sku, product_name: info.product_name, color: info.color, size: info.size,
+          qty_change: before - after, stock_in_id: sid, order_id: orderId,
+          detail: after === 0 ? `แก้ไขออเดอร์: เอาออก (เดิม ${before} ชิ้น)`
+            : before === 0 ? `แก้ไขออเดอร์: เพิ่มสินค้า ${after} ชิ้น`
+            : `แก้ไขออเดอร์: จำนวน ${before} → ${after}`,
+          recorded_by: authUser.name, created_at: now,
+        }));
+      }
+      await db.batch(ops, 'write');
+      return res.status(200).json({ success: true, count: processed.length });
     }
 
     // PATCH /api/sales — อัปเดตสถานะจัดส่ง (หลายออเดอร์พร้อมกันได้)
@@ -442,11 +576,23 @@ export default async function handler(req, res) {
         return res.status(403).json({ error: 'ไม่มีสิทธิ์ลบรายการนี้ (ลบได้เฉพาะ Admin หรือผู้บันทึก)' });
       }
 
-      if (order_id) {
-        await db.execute({ sql: 'DELETE FROM sales_orders WHERE order_id = ?', args: [order_id] });
-      } else {
-        await db.execute({ sql: 'DELETE FROM sales_orders WHERE id = ?', args: [id] });
-      }
+      // ลบแล้วสต๊อกคืนเอง (คงเหลือคำนวณจาก sales_orders) — เก็บประวัติว่าคืนอะไร ใครลบ
+      const removed = await db.execute({
+        sql: order_id ? 'SELECT * FROM sales_orders WHERE order_id = ?' : 'SELECT * FROM sales_orders WHERE id = ?',
+        args: [order_id || id],
+      });
+      const now = new Date().toISOString();
+      await db.batch([
+        order_id
+          ? { sql: 'DELETE FROM sales_orders WHERE order_id = ?', args: [order_id] }
+          : { sql: 'DELETE FROM sales_orders WHERE id = ?', args: [id] },
+        ...removed.rows.map((r) => movementStmt({
+          type: 'sale_delete', sku: r.sku, product_name: r.product_name, color: r.color, size: r.size,
+          qty_change: Number(r.quantity) || 0, stock_in_id: r.stock_in_id, order_id: r.order_id,
+          detail: order_id ? 'ลบออเดอร์ — คืนสต๊อก' : 'ลบรายการขาย — คืนสต๊อก',
+          recorded_by: authUser.name, created_at: now
+        })),
+      ], 'write');
 
       return res.status(200).json({ success: true });
     }

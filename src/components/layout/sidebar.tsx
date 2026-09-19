@@ -22,6 +22,7 @@ import {
   History,
   Wallet,
   CircleDollarSign,
+  ArrowLeftRight,
   Truck
 } from "lucide-react";
 
@@ -48,6 +49,7 @@ const menuGroups = [
       { id: "shipping",         label: "จัดส่ง",          icon: Truck },
       { id: "stock-inventory",  label: "สต๊อกคงเหลือ",    icon: Package },
       { id: "stock-value",      label: "สรุปมูลค่าสต๊อก",  icon: CircleDollarSign },
+      { id: "stock-movements",  label: "ความเคลื่อนไหวสต๊อก", icon: ArrowLeftRight },
       { id: "task-reminder",    label: "Task Reminder",    icon: CheckSquare },
       { id: "employees",        label: "จัดการพนักงาน",   icon: Users },
     ],
