@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { CalendarIcon, ShoppingCart, Trash2, ChevronsUpDown, Check, Plus, PackageCheck, Lock, Receipt, Package, DollarSign, MapPin, HandCoins } from "lucide-react";
+import { CalendarIcon, ShoppingCart, Trash2, Search, Plus, PackageCheck, Lock, Receipt, Package, DollarSign, MapPin, HandCoins } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { useSales } from "@/hooks/use-sales";
 import { useSettings } from "@/hooks/use-settings";
@@ -32,25 +32,31 @@ const toLocalDateStr = (d: Date) => {
   return `${y}-${m}-${day}`;
 };
 
-const emptyItemForm = {
-  stock_in_id: '',
-  sku: '',
-  product_name: '',
-  color: '',
-  size: '',
-  quantity: 1,
-  unit_price: 0,
-  discount_type: 'amount' as 'amount' | 'percent',
-  discount_value: 0,
-  note: ''
+// 1 แถวในตารางสินค้าของออเดอร์ — เลือกสินค้าแล้วเข้าตารางทันที แก้จำนวน/ราคา/ส่วนลดในแถวได้
+type CartItem = {
+  cartId: string;
+  stock_in_id: string;
+  sku: string;
+  product_name: string;
+  color: string;
+  size: string;
+  available: number;
+  quantity: number;
+  unit_price: string;
+  discount_type: 'amount' | 'percent';
+  discount_value: string;
+  note: string;
 };
 
-type CartItem = typeof emptyItemForm & {
-  cartId: string;
-  discountAmount: number;
-  finalUnitPrice: number;
-  totalAmount: number;
+const calcLine = (item: CartItem) => {
+  const price = Math.max(0, Number(item.unit_price) || 0);
+  const val = Math.max(0, Number(item.discount_value) || 0);
+  const discountAmount = item.discount_type === 'percent' ? price * (Math.min(val, 100) / 100) : Math.min(val, price);
+  const finalUnitPrice = Math.max(0, price - discountAmount);
+  return { discountAmount, finalUnitPrice, totalAmount: finalUnitPrice * item.quantity };
 };
+
+const baht = (n: number) => `฿${n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function SalesEntry() {
   const [date, setDate] = useState<Date>(new Date());
@@ -62,8 +68,10 @@ export function SalesEntry() {
   const [formOpen, setFormOpen] = useState(true);
   // เก็บเงินปลายทาง — เฉพาะออเดอร์ออนไลน์
   const [isCod, setIsCod] = useState(false);
-  const [itemForm, setItemForm] = useState(emptyItemForm);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [stockSearch, setStockSearch] = useState('');
+  // แถวที่เพิ่งเพิ่ม/บวกจำนวน — ไฮไลต์สีเขียวแวบหนึ่ง
+  const [flashId, setFlashId] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [stockComboOpen, setStockComboOpen] = useState(false);
   // Admin บันทึกแทนคนอื่นได้ — ว่าง = บันทึกในชื่อตัวเอง
@@ -87,12 +95,6 @@ export function SalesEntry() {
     refetchOnWindowFocus: false
   });
 
-  const handleItemSet = <K extends keyof typeof emptyItemForm>(
-    key: K,
-    value: K extends 'discount_type' ? (typeof emptyItemForm)[K] : (typeof emptyItemForm)[K] | string
-  ) =>
-    setItemForm(prev => ({ ...prev, [key]: value }));
-
   const handleChannelChange = (v: string) => {
     setChannel(v);
     setBranchOrPlatform('');
@@ -102,18 +104,47 @@ export function SalesEntry() {
     }
   };
 
+  // เลือกสินค้าแล้วเข้าตารางทันที · ตัวเดิมซ้ำ = บวกจำนวนในแถวเดิม (ไม่เกินสต๊อก)
   const handleSelectStock = (item: AvailableStockItem) => {
-    setItemForm(prev => ({
-      ...prev,
-      stock_in_id: item.id,
-      sku: item.sku,
-      product_name: item.product_name,
-      color: item.color,
-      size: item.size,
-      unit_price: item.sell_price
-    }));
-    setStockComboOpen(false);
+    const existing = cart.find(c => c.stock_in_id === item.id);
+    if (existing) {
+      if (existing.quantity >= item.available_quantity) {
+        toast({ title: 'สต๊อกไม่พอ', description: `${item.sku} เหลือ ${item.available_quantity} ชิ้น`, variant: 'destructive' });
+        return;
+      }
+      setCart(prev => prev.map(c => c.cartId === existing.cartId ? { ...c, quantity: c.quantity + 1 } : c));
+      flash(existing.cartId);
+    } else {
+      const cartId = `${Date.now()}_${Math.random().toString(36).slice(2, 5)}`;
+      setCart(prev => [...prev, {
+        cartId,
+        stock_in_id: item.id,
+        sku: item.sku,
+        product_name: item.product_name,
+        color: item.color,
+        size: item.size,
+        available: item.available_quantity,
+        quantity: 1,
+        unit_price: String(item.sell_price ?? 0),
+        discount_type: 'amount',
+        discount_value: '',
+        note: ''
+      }]);
+      flash(cartId);
+    }
+    setStockSearch('');
   };
+
+  const flash = (cartId: string) => {
+    setFlashId(cartId);
+    setTimeout(() => setFlashId(id => (id === cartId ? '' : id)), 1200);
+  };
+
+  const updateCartItem = (cartId: string, patch: Partial<CartItem>) =>
+    setCart(prev => prev.map(c => c.cartId === cartId ? { ...c, ...patch } : c));
+
+  const setQuantity = (item: CartItem, qty: number) =>
+    updateCartItem(item.cartId, { quantity: Math.min(item.available, Math.max(1, Math.floor(qty) || 1)) });
 
   const branchOptions: string[] = useMemo(() => {
     if (channel === 'store') return settings?.branchesByChannel?.store || [];
@@ -121,54 +152,82 @@ export function SalesEntry() {
     return [];
   }, [channel, settings]);
 
-  // คำนวณส่วนลด real-time สำหรับ item ที่กำลังกรอก
-  const discountAmount = useMemo(() => {
-    const price = Number(itemForm.unit_price) || 0;
-    const val = Number(itemForm.discount_value) || 0;
-    if (itemForm.discount_type === 'percent') return price * (val / 100);
-    return Math.min(val, price);
-  }, [itemForm.unit_price, itemForm.discount_type, itemForm.discount_value]);
-
-  const finalUnitPrice = useMemo(() => {
-    const price = Number(itemForm.unit_price) || 0;
-    return Math.max(0, price - discountAmount);
-  }, [itemForm.unit_price, discountAmount]);
-
-  const totalAmount = useMemo(() => {
-    return finalUnitPrice * (Number(itemForm.quantity) || 1);
-  }, [finalUnitPrice, itemForm.quantity]);
-
   // ค่าส่งคิดต่อออเดอร์ (ไม่บังคับ) — เป็นรายรับ นับรวมยอดขาย
   const shippingFee = Math.max(0, Number(shippingFeeInput) || 0);
 
   // ยอดรวมทั้ง cart
-  const cartSubtotal = useMemo(() => cart.reduce((s, i) => s + i.totalAmount, 0), [cart]);
+  const cartSubtotal = useMemo(() => cart.reduce((s, i) => s + calcLine(i).totalAmount, 0), [cart]);
   const cartTotal = cartSubtotal + shippingFee;
   const cartQty = useMemo(() => cart.reduce((s, i) => s + Number(i.quantity), 0), [cart]);
 
-  const selectedStockLabel = itemForm.stock_in_id
-    ? `${itemForm.sku} — ${itemForm.product_name}${itemForm.color ? ` (${itemForm.color}` : ''}${itemForm.size ? ` ${itemForm.size})` : itemForm.color ? ')' : ''}`
-    : '';
+  // ชิ้นส่วนที่ใช้ทั้งในตาราง (คอม) และการ์ด (มือถือ)
+  const renderQty = (item: CartItem) => (
+    <div className="inline-flex items-center rounded-md border overflow-hidden">
+      <button
+        type="button"
+        className="h-8 w-7 min-h-0 min-w-0 bg-muted/50 hover:bg-muted disabled:opacity-40"
+        aria-label="ลดจำนวน"
+        disabled={item.quantity <= 1}
+        onClick={() => setQuantity(item, item.quantity - 1)}
+      >−</button>
+      <input
+        type="number"
+        inputMode="numeric"
+        className="h-8 w-10 border-x bg-transparent text-center text-sm outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+        aria-label={`จำนวน ${item.sku}`}
+        value={item.quantity}
+        onChange={e => setQuantity(item, Number(e.target.value))}
+      />
+      <button
+        type="button"
+        className="h-8 w-7 min-h-0 min-w-0 bg-muted/50 hover:bg-muted disabled:opacity-40"
+        aria-label="เพิ่มจำนวน"
+        disabled={item.quantity >= item.available}
+        onClick={() => setQuantity(item, item.quantity + 1)}
+      >+</button>
+    </div>
+  );
 
-  const handleAddToCart = () => {
-    if (!itemForm.stock_in_id) {
-      toast({ title: 'กรุณาเลือกสินค้า', variant: 'destructive' });
-      return;
-    }
-    if ((Number(itemForm.quantity) || 0) < 1) {
-      toast({ title: 'จำนวนต้องมากกว่า 0', variant: 'destructive' });
-      return;
-    }
-    const cartItem: CartItem = {
-      ...itemForm,
-      cartId: `${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
-      discountAmount,
-      finalUnitPrice,
-      totalAmount
-    };
-    setCart(prev => [...prev, cartItem]);
-    setItemForm(emptyItemForm);
-  };
+  const renderDiscount = (item: CartItem) => (
+    <div className="flex items-center gap-1">
+      <Input
+        type="number" min="0" step="0.01" inputMode="decimal"
+        className="h-8 px-2 text-right"
+        placeholder="0"
+        aria-label={`ส่วนลด ${item.sku}`}
+        value={item.discount_value}
+        onChange={e => updateCartItem(item.cartId, { discount_value: e.target.value })}
+      />
+      <button
+        type="button"
+        title="สลับส่วนลดเป็นบาท / เปอร์เซ็นต์"
+        className="h-8 w-8 min-h-0 min-w-0 shrink-0 rounded-md border text-xs font-semibold hover:bg-muted"
+        onClick={() => updateCartItem(item.cartId, { discount_type: item.discount_type === 'amount' ? 'percent' : 'amount' })}
+      >{item.discount_type === 'percent' ? '%' : '฿'}</button>
+    </div>
+  );
+
+  const renderNote = (item: CartItem) => (
+    <input
+      className="mt-1 w-full rounded border border-dashed bg-transparent px-2 py-0.5 text-xs outline-none focus:border-rose-300"
+      placeholder="+ หมายเหตุ (ถ้ามี)"
+      aria-label={`หมายเหตุ ${item.sku}`}
+      value={item.note}
+      onChange={e => updateCartItem(item.cartId, { note: e.target.value })}
+    />
+  );
+
+  const renderRemove = (item: CartItem) => (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0 h-7 w-7 p-0 min-h-0 min-w-0"
+      aria-label={`ลบ ${item.sku}`}
+      onClick={() => handleRemoveFromCart(item.cartId)}
+    >
+      <Trash2 className="h-3.5 w-3.5" />
+    </Button>
+  );
 
   const handleRemoveFromCart = (cartId: string) => {
     setCart(prev => prev.filter(i => i.cartId !== cartId));
@@ -178,6 +237,8 @@ export function SalesEntry() {
     if (!channel) { toast({ title: 'กรุณาเลือกช่องทางการขาย', variant: 'destructive' }); return false; }
     if (!branchOrPlatform) { toast({ title: 'กรุณาเลือกสาขา/แพลตฟอร์ม', variant: 'destructive' }); return false; }
     if (cart.length === 0) { toast({ title: 'กรุณาเพิ่มสินค้าอย่างน้อย 1 รายการ', variant: 'destructive' }); return false; }
+    const over = cart.find(i => i.quantity > i.available);
+    if (over) { toast({ title: 'สต๊อกไม่พอ', description: `${over.sku} เหลือ ${over.available} ชิ้น`, variant: 'destructive' }); return false; }
     return true;
   };
 
@@ -190,7 +251,7 @@ export function SalesEntry() {
       product_name: item.product_name,
       color: item.color,
       size: item.size,
-      quantity: Number(item.quantity) || 1,
+      quantity: item.quantity,
       unit_price: Number(item.unit_price) || 0,
       discount_type: item.discount_type,
       discount_value: Number(item.discount_value) || 0,
@@ -210,7 +271,6 @@ export function SalesEntry() {
     addSales(buildOrders(), {
       onSuccess: () => {
         setCart([]);
-        setItemForm(emptyItemForm);
         setShippingAddress('');
         setShippingFeeInput('');
         setIsCod(false);
@@ -224,7 +284,6 @@ export function SalesEntry() {
     addSales(buildOrders(), {
       onSuccess: () => {
         setCart([]);
-        setItemForm(emptyItemForm);
         setChannel('');
         setBranchOrPlatform('');
         setShippingAddress('');
@@ -268,9 +327,10 @@ export function SalesEntry() {
         <p className="text-muted-foreground text-sm mt-1 ml-11">บันทึกการขายสินค้าจากสต๊อก</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* ฟอร์มกว้าง 2/3 บนจอใหญ่ เพื่อให้ตารางสินค้ามีที่พอ · จอเล็กกว่าเรียงลงมาเต็มความกว้าง */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Form */}
-        <Card className="card-elevated overflow-hidden">
+        <Card className="card-elevated overflow-hidden xl:col-span-2">
           <CardHeader className="bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-950/30 dark:to-pink-950/30 border-b">
             <CardTitle className="text-base flex items-center gap-2">
               <Receipt className="h-5 w-5 text-rose-500" />
@@ -417,199 +477,153 @@ export function SalesEntry() {
               </div>
             )}
 
-            {/* เส้นแบ่ง: ส่วนเพิ่มสินค้า */}
-            <div id="add_item_section" className="border-t pt-4">
-              <p className="text-sm font-medium text-muted-foreground mb-3">เพิ่มสินค้าในรายการ</p>
+            {/* สินค้าในออเดอร์: ค้นหา → กดเลือก → เข้าตารางทันที แล้วเลือกตัวถัดไปต่อได้ */}
+            <div id="add_item_section" className="border-t pt-4 space-y-3">
+              <p className="text-sm font-medium text-muted-foreground">
+                สินค้าในออเดอร์{cart.length > 0 && ` (${cart.length} รายการ · ${cartQty} ชิ้น)`}
+              </p>
 
-              {/* เลือกสินค้า */}
-              <div className="space-y-3">
-                <div>
-                  <Label>สินค้า <span className="text-red-500">*</span></Label>
-                  <Popover open={stockComboOpen} onOpenChange={setStockComboOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        className={cn(
-                          "w-full justify-between mt-1 font-normal",
-                          !itemForm.stock_in_id && "text-muted-foreground"
-                        )}
-                      >
-                        <span className="truncate">
-                          {itemForm.stock_in_id ? selectedStockLabel : 'ค้นหา SKU หรือชื่อสินค้า...'}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
-                      <Command>
-                        <CommandInput placeholder="พิมพ์ SKU หรือชื่อสินค้า..." />
-                        <CommandList>
-                          <CommandEmpty>ไม่พบสินค้าในสต๊อก</CommandEmpty>
-                          <CommandGroup>
-                            {availableStock.map(item => (
-                              <CommandItem
-                                key={item.id}
-                                value={`${item.sku} ${item.product_name} ${item.color} ${item.size}`}
-                                onSelect={() => handleSelectStock(item)}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    itemForm.stock_in_id === item.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
-                                <div className="flex flex-col flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono text-xs text-muted-foreground">{item.sku}</span>
-                                    <span className="font-medium truncate">{item.product_name}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    {item.color && <span>{item.color}</span>}
-                                    {item.size && <span>{item.size}</span>}
-                                    <Badge variant="outline" className="text-xs py-0">
-                                      เหลือ {item.available_quantity} ชิ้น
-                                    </Badge>
-                                  </div>
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                </div>
+              <Popover open={stockComboOpen} onOpenChange={o => { setStockComboOpen(o); if (!o) setStockSearch(''); }}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-start font-normal text-muted-foreground border-rose-300 hover:border-rose-400"
+                  >
+                    <Search className="mr-2 h-4 w-4 shrink-0 opacity-60" />
+                    <span className="truncate">ค้นหารหัสหรือชื่อสินค้า แล้วกดเลือกเพื่อเพิ่มเข้าตาราง...</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] min-w-[300px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="พิมพ์รหัสหรือชื่อสินค้า..." value={stockSearch} onValueChange={setStockSearch} />
+                    <CommandList>
+                      <CommandEmpty>ไม่พบสินค้าในสต๊อก</CommandEmpty>
+                      <CommandGroup>
+                        {availableStock.map(item => {
+                          const inCart = cart.find(c => c.stock_in_id === item.id)?.quantity ?? 0;
+                          return (
+                            <CommandItem
+                              key={item.id}
+                              value={`${item.sku} ${item.product_name} ${item.color} ${item.size} ${item.id}`}
+                              onSelect={() => handleSelectStock(item)}
+                            >
+                              <div className="flex flex-1 items-center gap-2 min-w-0">
+                                <span className="font-mono text-xs text-muted-foreground shrink-0">{item.sku}</span>
+                                <span className="font-medium truncate">{item.product_name}</span>
+                                <span className="text-xs text-muted-foreground shrink-0">{[item.color, item.size].filter(Boolean).join(' ')}</span>
+                              </div>
+                              {inCart > 0 && (
+                                <Badge className="ml-2 text-xs py-0 bg-emerald-500 hover:bg-emerald-500 text-white border-0 shrink-0">ในตาราง {inCart}</Badge>
+                              )}
+                              <Badge variant="outline" className="ml-1 text-xs py-0 shrink-0">เหลือ {item.available_quantity}</Badge>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="quantity">จำนวน (ชิ้น)</Label>
-                    <Input
-                      id="quantity"
-                      type="number"
-                      min="1"
-                      className="mt-1"
-                      value={itemForm.quantity}
-                      onChange={e => handleItemSet('quantity', e.target.value)}
-                    />
+              {cart.length === 0 ? (
+                <p className="text-center text-sm text-muted-foreground py-4 border border-dashed rounded-lg">
+                  ยังไม่มีสินค้า — ค้นหาแล้วกดเลือกด้านบน
+                </p>
+              ) : (
+                <>
+                  {/* คอม/แท็บเล็ต: ตาราง */}
+                  <div className="hidden md:block rounded-lg border overflow-hidden">
+                    <Table className="table-fixed">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[60px] px-3">รหัส</TableHead>
+                          <TableHead className="px-2">สินค้า</TableHead>
+                          <TableHead className="w-[108px] px-2 text-center">จำนวน</TableHead>
+                          <TableHead className="w-[92px] px-2 text-right whitespace-nowrap">ราคา/ชิ้น</TableHead>
+                          <TableHead className="w-[120px] px-2 text-right">ส่วนลด</TableHead>
+                          <TableHead className="w-[96px] px-2 text-right">รวม</TableHead>
+                          <TableHead className="w-[40px] px-1" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cart.map(item => (
+                          <TableRow key={item.cartId} className={cn("align-top transition-colors duration-700", flashId === item.cartId && "bg-emerald-50 dark:bg-emerald-950/30")}>
+                            <TableCell className="py-2 px-3 font-mono text-xs text-muted-foreground">{item.sku}</TableCell>
+                            <TableCell className="py-2 px-2">
+                              <div className="font-medium leading-tight">{item.product_name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {[item.color, item.size].filter(Boolean).join(' · ')}{(item.color || item.size) ? ' · ' : ''}เหลือ {item.available}
+                              </div>
+                              {renderNote(item)}
+                            </TableCell>
+                            <TableCell className="py-2 px-2 text-center">{renderQty(item)}</TableCell>
+                            <TableCell className="py-2 px-2">
+                              <Input
+                                type="number" min="0" step="0.01" inputMode="decimal"
+                                className="h-8 px-2 text-right"
+                                aria-label={`ราคา ${item.sku}`}
+                                value={item.unit_price}
+                                onChange={e => updateCartItem(item.cartId, { unit_price: e.target.value })}
+                              />
+                            </TableCell>
+                            <TableCell className="py-2 px-2">{renderDiscount(item)}</TableCell>
+                            <TableCell className="py-2 px-2 text-right font-semibold tabular-nums">{baht(calcLine(item).totalAmount)}</TableCell>
+                            <TableCell className="py-2 px-2">{renderRemove(item)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
-                  <div>
-                    <Label htmlFor="unit_price">ราคาขาย/ชิ้น (บาท)</Label>
-                    <Input
-                      id="unit_price"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="mt-1"
-                      value={itemForm.unit_price}
-                      onChange={e => handleItemSet('unit_price', e.target.value)}
-                    />
-                  </div>
-                </div>
 
-                <div>
-                  <Label>ส่วนลด</Label>
-                  <div className="flex gap-2 mt-1">
-                    <Select
-                      value={itemForm.discount_type}
-                      onValueChange={v => { handleItemSet('discount_type', v as 'amount' | 'percent'); handleItemSet('discount_value', 0); }}
-                    >
-                      <SelectTrigger className="w-24 shrink-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="amount">บาท</SelectItem>
-                        <SelectItem value="percent">%</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      max={itemForm.discount_type === 'percent' ? 100 : undefined}
-                      placeholder={itemForm.discount_type === 'percent' ? 'เช่น 10' : 'เช่น 50'}
-                      value={itemForm.discount_value}
-                      onChange={e => handleItemSet('discount_value', e.target.value)}
-                    />
+                  {/* มือถือ: การ์ดเรียงลงมา */}
+                  <div className="md:hidden space-y-2">
+                    {cart.map(item => (
+                      <div key={item.cartId} className={cn("rounded-lg border p-3 space-y-2 transition-colors duration-700", flashId === item.cartId && "bg-emerald-50 dark:bg-emerald-950/30")}>
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium leading-tight">
+                              <span className="font-mono text-xs text-muted-foreground mr-1.5">{item.sku}</span>{item.product_name}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {[item.color, item.size].filter(Boolean).join(' · ')}{(item.color || item.size) ? ' · ' : ''}เหลือ {item.available}
+                            </div>
+                          </div>
+                          {renderRemove(item)}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">จำนวน</Label>
+                            <div className="mt-1">{renderQty(item)}</div>
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">ราคา/ชิ้น</Label>
+                            <Input
+                              type="number" min="0" step="0.01" inputMode="decimal"
+                              className="mt-1 h-8 px-2 text-right"
+                              value={item.unit_price}
+                              onChange={e => updateCartItem(item.cartId, { unit_price: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">ส่วนลด</Label>
+                            <div className="mt-1">{renderDiscount(item)}</div>
+                          </div>
+                          <div className="text-right">
+                            <Label className="text-xs text-muted-foreground">รวม</Label>
+                            <div className="mt-1 h-8 flex items-center justify-end font-semibold tabular-nums">{baht(calcLine(item).totalAmount)}</div>
+                          </div>
+                        </div>
+                        {renderNote(item)}
+                      </div>
+                    ))}
                   </div>
-                </div>
-
-                {/* สรุปราคา real-time */}
-                <div className="bg-rose-50 dark:bg-rose-950/40 rounded-lg p-3 space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">ราคาต่อชิ้น</span>
-                    <span>฿{Number(itemForm.unit_price).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between text-rose-600">
-                    <span>ส่วนลด</span>
-                    <span>- ฿{discountAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between font-medium border-t pt-1">
-                    <span>ราคาสุทธิ/ชิ้น</span>
-                    <span>฿{finalUnitPrice.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-base text-rose-600">
-                    <span>ยอดรวม ({itemForm.quantity} ชิ้น)</span>
-                    <span>฿{totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="note">หมายเหตุ (รายการนี้)</Label>
-                  <Textarea
-                    id="note"
-                    className="mt-1"
-                    value={itemForm.note}
-                    onChange={e => handleItemSet('note', e.target.value)}
-                    placeholder="เพิ่มหมายเหตุ (ถ้ามี)"
-                    rows={2}
-                  />
-                </div>
-
-                <Button
-                  variant="outline"
-                  className="w-full border-rose-400 text-rose-600 hover:bg-rose-50"
-                  onClick={handleAddToCart}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  เพิ่มลงรายการ
-                </Button>
-              </div>
+                </>
+              )}
             </div>
 
-            {/* Cart */}
             {cart.length > 0 && (
               <div className="border-t pt-4 space-y-3">
-                <p className="text-sm font-medium">รายการที่จะบันทึก ({cart.length} รายการ)</p>
-                <div className="space-y-2">
-                  {cart.map(item => (
-                    <div key={item.cartId} className="flex items-start gap-2 bg-muted/40 rounded-lg p-3 text-sm">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium truncate">{item.product_name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {item.sku}{item.color ? ` · ${item.color}` : ''}{item.size ? ` ${item.size}` : ''}
-                        </div>
-                        <div className="text-xs mt-1">
-                          {item.quantity} ชิ้น × ฿{Number(item.unit_price).toLocaleString('th-TH')}
-                          {item.discountAmount > 0 && (
-                            <span className="text-rose-500"> (ลด ฿{item.discountAmount.toLocaleString('th-TH')})</span>
-                          )}
-
-                          <span className="font-semibold ml-1">= ฿{item.totalAmount.toLocaleString('th-TH')}</span>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-600 hover:bg-red-50 shrink-0 h-7 w-7 p-0"
-                        onClick={() => handleRemoveFromCart(item.cartId)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-
                 {/* ค่าส่งของทั้งออเดอร์ — บอสขอให้กรอกตอนท้าย หลังใส่สินค้าครบ ก่อนกดบันทึก */}
                 <div>
                   <Label htmlFor="shipping_fee">
@@ -676,11 +690,6 @@ export function SalesEntry() {
               </div>
             )}
 
-            {cart.length === 0 && (
-              <p className="text-center text-sm text-muted-foreground py-2">
-                ยังไม่มีสินค้าในรายการ — กดเพิ่มลงรายการด้านบน
-              </p>
-            )}
           </CardContent>
         </Card>
 
