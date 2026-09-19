@@ -5,7 +5,7 @@ import { movementStmt, MOVEMENT_TYPES } from '../lib/stock-movements.js';
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -203,9 +203,11 @@ export default async function handler(req, res) {
     }
 
     // POST /api/stock — บันทึกสต๊อกใหม่
+    // เพิ่ม/แก้/ลบล็อตสต๊อกต้องล็อกอิน (กระทบสต๊อกและต้นทุน + ต้องรู้ว่าใครทำ)
     if (req.method === 'POST') {
       const authUser = authenticate(req);
-      const recordedBy = authUser ? authUser.name : '';
+      if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+      const recordedBy = authUser.name;
       const { date, sku, product_name, product_category, color, size, quantity, cost_price, sell_price, note, image_url } = req.body;
 
       if (!date || !sku || !product_name) {
@@ -239,12 +241,13 @@ export default async function handler(req, res) {
 
     // PUT /api/stock — แก้ไขสต๊อก
     if (req.method === 'PUT') {
+      const authUser = authenticate(req);
+      if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'Missing id' });
 
       const { quantity, cost_price, sell_price, note, product_name, product_category, date, image_url } = req.body;
       const now = new Date().toISOString();
-      const authUser = authenticate(req);
 
       const oldResult = await db.execute({ sql: 'SELECT * FROM stock_in WHERE id = ?', args: [id] });
       const oldLot = oldResult.rows[0];
@@ -285,7 +288,7 @@ export default async function handler(req, res) {
           type: 'in_edit', sku: oldLot.sku, product_name: product_name ?? oldLot.product_name,
           color: oldLot.color, size: oldLot.size, qty_change: qtyDiff, stock_in_id: id,
           detail: `แก้จำนวนรับเข้า ${Number(oldLot.quantity)} → ${Number(quantity)}`,
-          recorded_by: authUser?.name || '', created_at: now
+          recorded_by: authUser.name, created_at: now
         }));
       }
       await db.batch(ops, 'write');
@@ -294,10 +297,11 @@ export default async function handler(req, res) {
 
     // DELETE /api/stock?id=xxx
     if (req.method === 'DELETE') {
+      const authUser = authenticate(req);
+      if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'Missing id' });
 
-      const authUser = authenticate(req);
       const lotResult = await db.execute({ sql: 'SELECT * FROM stock_in WHERE id = ?', args: [id] });
       const lot = lotResult.rows[0];
       const ops = [{ sql: 'DELETE FROM stock_in WHERE id = ?', args: [id] }];
@@ -305,7 +309,7 @@ export default async function handler(req, res) {
         ops.push(movementStmt({
           type: 'in_delete', sku: lot.sku, product_name: lot.product_name, color: lot.color, size: lot.size,
           qty_change: -Number(lot.quantity || 0), stock_in_id: id,
-          detail: `ลบล็อตรับเข้า (วันที่รับ ${lot.date})`, recorded_by: authUser?.name || ''
+          detail: `ลบล็อตรับเข้า (วันที่รับ ${lot.date})`, recorded_by: authUser.name
         }));
       }
       await db.batch(ops, 'write');
