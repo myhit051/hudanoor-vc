@@ -116,7 +116,7 @@ function CompactShippingLabel({ order, sender }: { order: OrderSummary; sender: 
   const items = order.items.slice(0, MAX_COMPACT_ITEMS);
   const more = order.items.length - items.length;
   const itemText = items
-    .map(i => `${i.sku} ${i.product_name}${i.size ? ` ${i.size}` : ''} ×${i.quantity}`)
+    .map(i => `${i.sku} ${i.product_name}${[i.color, i.size].filter(Boolean).length ? ` ${[i.color, i.size].filter(Boolean).join('/')}` : ''} ×${i.quantity}`)
     .join(', ') + (more > 0 ? ` +อีก ${more} รายการ` : '');
   return (
     <div
