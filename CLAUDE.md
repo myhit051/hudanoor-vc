@@ -23,9 +23,10 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 เจ้าของร้าน (เรียกว่า "บอส") ไม่ใช่โปรแกรมเมอร์ — ตอบภาษาไทยง่าย ๆ เลี่ยงศัพท์เทคนิค
 
 ## ไฟล์เสริม (อ่านเมื่อจำเป็น)
-- `AI_HISTORY.md` — ประวัติคำขอของบอสทีละเรื่อง + เหตุผลของการตัดสินใจ → อ่านก่อนแก้ฟีเจอร์ขาย/จัดส่ง/ค่าส่ง/COD
+- `AI_HISTORY.md` — ประวัติคำขอของบอสทีละเรื่อง (17–22 ก.ย. 2026) + เหตุผล + งานค้าง → อ่านก่อนแก้ฟีเจอร์ขาย/จัดส่ง/ค่าส่ง/COD/สต๊อก/Live CF และก่อนเสนอไอเดียใหม่ (อาจเคยเสนอ/ปฏิเสธไปแล้ว)
 - `AI_TESTING.md` — วิธีทดสอบ API กับ SQLite จำลอง และทดสอบหน้าเว็บด้วย Playwright + API ปลอม → อ่านก่อนทดสอบทุกครั้ง
-- `openspec/changes/*` — ข้อเสนอฟีเจอร์ (ล่าสุด `add-stock-movements`) → อัปเดตเมื่อเพิ่มฟีเจอร์ใหญ่
+- `openspec/changes/*` — ข้อเสนอฟีเจอร์ (ล่าสุด `add-live-cf-export`, `add-stock-movements`) → อัปเดตเมื่อเพิ่มฟีเจอร์ใหญ่
+- `AGENTS.md` = บล็อก OpenSpec ของเครื่องมือ openspec (Codex อ่านไฟล์นั้น) — ไม่ใช่คู่มือโปรเจกต์ อย่าเขียนซ้ำ
 
 ## ลิงก์สำคัญ
 - https://hudanoor-vc.vercel.app — เว็บจริง (Vercel)
@@ -33,6 +34,9 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - `/stock-receiving` รับของ · `/stock-inventory` สต๊อกคงเหลือ · `/stock-value` มูลค่าสต๊อก · `/stock-movements` ความเคลื่อนไหวสต๊อก · `/employees` · `/payroll` (admin) · `/settings`
   - `/api/*` = Vercel serverless functions ในโฟลเดอร์ `api/`
 - https://github.com/myhit051/hudanoor-vc — repo (branch `main`) **push แล้ว Vercel deploy เองอัตโนมัติ** ไม่ต้องใช้ azhub-publish / pm2
+- `/root/projects/HUDANOOR-Live-CF-Platform` — ระบบไลฟ์ขาย CF ของร้าน (โปรเจกต์แยก รันบน VPS นี้ด้วย pm2 `hudanoor-dashboard`) รับไฟล์ CSV สินค้าจากหน้าสต๊อกคงเหลือ · **อ่านโค้ดได้ ห้ามแก้จากโปรเจกต์นี้** — งานฝั่งนั้นส่งต่อด้วยไฟล์ handoff
+- `/root/projects/handoffs/` — ไฟล์ส่งต่องานข้ามโปรเจกต์ (`~/.claude/handoffs/` เขียนไม่ได้ ติดสิทธิ์) · ล่าสุด `2026-09-22-live-cf-flexible-variant-comments.md`
+- https://amir-hudanoor-mockup.azhub.co — หน้า mockup ตารางสินค้า (pm2 `hudanoor-mockup`, `/root/projects/hudanoor-mockup`) ใช้เสร็จแล้ว ปิดได้ถ้าบอสไม่ใช้
 
 ## สถาปัตยกรรมย่อ
 - หน้าเว็บ: Vite + React + TS + shadcn/ui + Tailwind + react-query (`src/`)
@@ -79,6 +83,14 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - เมนูใหม่ต้องให้แอดมินเปิดสิทธิ์ให้พนักงานเองในหน้าจัดการพนักงาน — แจ้งบอสทุกครั้ง
 - ฟีเจอร์ใหญ่ → บันทึกใน `openspec/changes/<ชื่อ>/` (proposal.md, tasks.md, specs/) ตามแบบที่มีอยู่ (ไม่มี openspec CLI ในเครื่อง)
 
+## วิธีทำงานกับบอส (สิ่งที่เห็นแล้วว่าได้ผล)
+- ตอบเป็นภาษาไทยเสมอ (เคยพลาดตอบภาษาอื่น บอสต้องสั่ง "สรุปมาภาษาไทย")
+- คำขอกำกวมที่ทำได้หลายแบบ (เช่น "ปิดฟอร์ม", "export") → ถามพร้อมตัวเลือกก่อน อย่าเดา · เรื่องเล็กที่มีค่าที่ดีกว่าชัด ๆ ทำเลยแล้วบอก
+- งานหน้าจอใหญ่ → บอสชอบดู mockup HTML ก่อน (เผยแพร่ด้วย `azhub-publish` แล้วส่งลิงก์)
+- เจอช่องโหว่/บั๊กนอกขอบเขต → แจ้งและถามก่อนแก้ (เช่นเรื่อง API สต๊อกไม่ต้องล็อกอิน)
+- รวมงานหลายชิ้นแล้ว push ทีเดียว เพราะโควต้า deploy ของ Vercel จำกัดต่อวัน · บอกบอสตรง ๆ ถ้าติดโควต้า
+- รายงานทุกครั้ง: ทำอะไร · ขึ้นเว็บแล้วหรือยัง · ทดสอบกับอะไร (จำลอง/จริง) · อะไรที่ยังไม่ได้ลอง
+
 ## ข้อห้าม
 - ห้ามสร้าง/ลบข้อมูลทดสอบบนเว็บจริงหรือฐานข้อมูลจริง → ทดสอบกับ SQLite จำลองและ API ปลอมเท่านั้น (ดู `AI_TESTING.md`) แล้วบอกบอสตรง ๆ ว่ายังไม่ได้ลองบันทึกจริง
 - ห้ามเปิด API ขายให้เรียกได้โดยไม่ล็อกอิน · ห้ามใส่ความลับลงไฟล์/commit
@@ -96,19 +108,25 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - ฟิลด์ที่อยู่ใน section ที่แสดงแบบมีเงื่อนไข (`cart.length > 0`) จะโผล่หลังเพิ่มสินค้าแล้วเท่านั้น — ค่าส่งตั้งใจไว้ตรงนั้นตามที่บอสขอ ฟิลด์ระดับออเดอร์อื่นให้แสดงตลอด
 - Vercel ฟรีจำกัดจำนวน deploy ต่อวัน — push ถี่ ๆ แล้วเว็บไม่อัปเดต ให้เช็ค `gh api repos/myhit051/hudanoor-vc/commits/<sha>/statuses` ถ้าขึ้น "Deployment rate limited" ต้องรอแล้ว push ใหม่ (Vercel ไม่ลองซ้ำเอง) · check `build-and-deploy` (GitHub Pages) fail ทุกครั้งอยู่แล้ว ไม่เกี่ยว
 - 18 ก.ย. 2026 เว็บตอบ 403 "Vercel Security Checkpoint" กับ curl/Chrome headless จาก VPS นี้ → เช็ค asset ไม่ได้ ให้ใช้สถานะ deploy จาก `gh api .../commits/<sha>/statuses` ("Deployment has completed") แทน
-- ตัวเช็คว่า deploy เสร็จ: หา asset `index-*.js` จากหน้าเว็บแล้ว grep ข้อความใหม่ในไฟล์นั้น (รอ ~1–3 นาที)
+- ตัวเช็คว่า deploy เสร็จ (ใช้ไม่ได้ตอนติด Security Checkpoint ข้างบน): หา asset `index-*.js` จากหน้าเว็บแล้ว grep ข้อความใหม่ (รอ ~1–3 นาที)
+- ระบบไลฟ์อ่านรหัสจากคอมเมนต์ด้วย `/[a-z]{1,4}\d{1,4}/` — ตัวอักษรหลังตัวเลขถูกตัดทิ้ง (`A081M` → `A081` = ตัดสต๊อกผิดตัว) ห้ามออกแบบรหัสที่มีตัวอักษรท้าย · ทดสอบของจริงได้: `/root/projects/HUDANOOR-Live-CF-Platform/node_modules/.bin/tsx` + import `parseCfComment` (`packages/domain-cf/src/parser.ts`) / `parseProductImport` (`apps/api/src/csv-import.ts`)
+- ทดสอบหน้าที่แก้ทั้ง API และ UI: ใน Playwright `ctx.route` เรียก handler จริงกับ SQLite (ดู `AI_TESTING.md` ข้อ 3) — เจอบั๊กที่ mock ไม่เจอ
+- `vite preview` เก่าค้างพอร์ต 4179 → `fuser -k 4179/tcp` ก่อนรันใหม่ · Playwright `getByText` ชนหลายตัวบ่อย ใช้ `getByRole(..., { name })` / `getByLabel`
+- ฟอร์มกว้างครึ่งจอทำให้ตารางบีบจนช่อง input หาย → ใช้ `table-fixed` + กำหนดความกว้างคอลัมน์ และให้ฟอร์มกว้าง 2/3
 - เปิดหน้าเว็บที่ `localhost` แอปจะยิง API ไป `http://localhost:3000/api` → ทดสอบด้วย `vite preview --host 127.0.0.1` (จะใช้ `/api` ปกติ แล้ว mock ด้วย route)
 
 ## คำสั่งที่ใช้บ่อย
 ```bash
 cd /root/projects/hudanoor-vc
 CAP_MEM=2G capped npm run build                                   # build (ต้องผ่านก่อน push)
-capped npx tsc --noEmit -p tsconfig.app.json 2>&1 | grep -E "SalesEntry|Shipping|OrderHistory|sales-api"
+capped npx tsc --noEmit -p tsconfig.app.json 2>&1 | grep -E "SalesEntry|Shipping|OrderHistory|StockMovements|StockInventory|sales-api|stock-api|components/(sales|stock)"
 node --check api/sales.js                                         # เช็ค syntax API
 npx vite preview --host 127.0.0.1 --port 4179 --strictPort        # รันแบบ background เพื่อทดสอบ UI
 fuser -k 4179/tcp                                                 # ปิดเซิร์ฟเวอร์ทดสอบ
 git add <ไฟล์> && git commit -m "feat: ..." && git push origin main   # push = deploy
-# รอ deploy แล้วเช็คว่าข้อความใหม่ขึ้นจริง
+# เช็คผล deploy (ตัวนี้เชื่อได้แม้เว็บติด Security Checkpoint) — success = ขึ้นแล้ว, "rate limited" = ติดโควต้า
+sha=$(git rev-parse HEAD); gh api repos/myhit051/hudanoor-vc/commits/$sha/statuses --jq '.[0] | "\(.state) \(.description)"'
+# (สำรอง) เช็คว่าข้อความใหม่ขึ้นจริง
 js=$(curl -s https://hudanoor-vc.vercel.app/ | grep -o 'assets/index-[^"]*\.js' | head -1); curl -s "https://hudanoor-vc.vercel.app/$js" | grep -c "ข้อความใหม่"
 curl -s -o /dev/null -w '%{http_code}' https://hudanoor-vc.vercel.app/api/sales   # ต้องได้ 401
 ```
