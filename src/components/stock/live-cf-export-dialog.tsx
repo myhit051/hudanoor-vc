@@ -22,10 +22,24 @@ const csvCell = (value: string | number) => {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-/** ไฟล์สำหรับนำเข้า HUDANOOR Live CF: product_name, variant, cf_code, price, stock (+ sku ไว้อ้างอิง ระบบไลฟ์ข้ามให้) */
+/**
+ * รหัสสินค้าหลักที่ลูกค้าพิมพ์คู่กับสี/ไซส์ในไลฟ์ (เช่น "CF A08 ดำ M") — ใช้ได้เฉพาะ SKU ที่เป็นรูปแบบรหัส CF
+ * SKU อย่าง "no" ลูกค้าพิมพ์ไม่ได้ ปล่อยว่าง (ลูกค้าใช้รหัสเต็ม cf_code แทน)
+ */
+const productCode = (sku: string) => {
+  const code = sku.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return CF_CODE_RE.test(code) ? code : '';
+};
+
+/**
+ * ไฟล์สำหรับนำเข้า HUDANOOR Live CF: product_name, variant, cf_code, price, stock (คอลัมน์บังคับของระบบไลฟ์)
+ * + product_code, color, size ให้ระบบไลฟ์จับคู่คอมเมนต์แบบ "A08 ดำ M" ได้ + sku ไว้อ้างอิง
+ * (ระบบไลฟ์รุ่นที่ยังไม่รองรับจะข้ามคอลัมน์ที่ไม่รู้จักให้เอง)
+ */
 function buildLiveCfCsv(rows: CfVariant[]) {
-  const header = ['product_name', 'variant', 'cf_code', 'price', 'stock', 'sku'];
-  const lines = rows.map(v => [liveProductName(v), variantLabel(v), v.cf_code, Number(v.price) || 0, Math.max(0, Math.floor(v.stock)), v.sku]
+  const header = ['product_name', 'variant', 'cf_code', 'price', 'stock', 'product_code', 'color', 'size', 'sku'];
+  const lines = rows.map(v => [liveProductName(v), variantLabel(v), v.cf_code, Number(v.price) || 0, Math.max(0, Math.floor(v.stock)),
+    productCode(v.sku), v.color, v.size, v.sku]
     .map(csvCell).join(','));
   return '﻿' + [header.join(','), ...lines].join('\r\n') + '\r\n';
 }
@@ -192,7 +206,7 @@ export function LiveCfExportDialog({ open, onOpenChange }: LiveCfExportDialogPro
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                ไฟล์มีคอลัมน์ product_name, variant, cf_code, price, stock (และ sku ไว้อ้างอิง) — อัปโหลดที่หน้า /admin/products ของระบบไลฟ์
+                ไฟล์มีคอลัมน์ product_name, variant, cf_code, price, stock + product_code, color, size, sku — อัปโหลดที่หน้า /admin/products ของระบบไลฟ์
               </p>
               <Button
                 className="bg-gradient-to-r from-rose-500 to-pink-500 text-white shrink-0"
