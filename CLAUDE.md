@@ -58,6 +58,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `stock_movements` = **ประวัติ**ความเคลื่อนไหวสต๊อก (ไม่ใช่ตัวคำนวณคงเหลือ — คงเหลือยังเป็น `stock_in − sales_orders`) · ทุก API ที่เพิ่ม/แก้/ลบ `stock_in` หรือ `sales_orders` **ต้อง** ใส่ `movementStmt()` (`lib/stock-movements.js`) ใน `db.batch` เดียวกัน · ประวัติแก้/ลบเริ่ม 19 ก.ย. 2026
 - แก้สินค้าในออเดอร์ = `PUT /api/sales?order_id=` (Admin/ผู้บันทึก) ลบแถวเดิมแล้วสร้างใหม่ คง order_id วันที่ ช่องทาง ที่อยู่ COD สถานะจัดส่ง ผู้บันทึก created_at · หน้าต่าง `EditOrderItemsDialog` ในหน้าประวัติการขาย
 - ตารางสินค้าในออเดอร์ใช้ร่วมกันที่ `src/components/sales/order-items-editor.tsx` (หน้าบันทึกยอดขาย + หน้าต่างแก้ไข)
+- ส่งออกไประบบไลฟ์ `HUDANOOR Live CF` (โปรเจกต์ `/root/projects/HUDANOOR-Live-CF-Platform` บน VPS นี้): หน้าสต๊อกคงเหลือ → ปุ่ม "ส่งออก CSV สำหรับ Live CF" · รหัส CF ถาวรในตาราง `cf_codes` ต่อ sku+สี+ไซส์ (`lib/cf-codes.js`) ต้องตรง `/^[A-Z]{1,4}\d{1,4}$/` เพราะตัวอ่านคอมเมนต์ในไลฟ์ (`packages/domain-cf/src/parser.ts`) อ่านได้แค่นี้ · **ห้ามเปลี่ยนรหัสที่ตั้งแล้วอัตโนมัติ** (ระบบไลฟ์ใช้รหัสจับคู่สินค้า) · ตรวจไฟล์ด้วย `parseProductImport` ของระบบไลฟ์ (รันด้วย tsx ของโปรเจกต์นั้น)
 - `legacy_sales` = ข้อมูลเก่าจาก Sheet/รายรับ manual — ไม่มี order_id, ไม่มีสถานะจัดส่ง, ถูกกรองออกจากหน้าจัดส่ง
 
 ## กติกาที่ตกลงกับบอสแล้ว (อย่าเปลี่ยนเองโดยไม่ถาม)

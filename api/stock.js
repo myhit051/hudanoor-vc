@@ -1,6 +1,7 @@
 import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate } from '../lib/auth-middleware.js';
 import { movementStmt, MOVEMENT_TYPES } from '../lib/stock-movements.js';
+import { listCfVariants, normalizeCfCode, CF_CODE_RE } from '../lib/cf-codes.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,6 +17,13 @@ export default async function handler(req, res) {
     // GET /api/stock — ดึงรายการสต๊อก
     if (req.method === 'GET') {
       const { date, sku, available, view, limit = 500, offset = 0 } = req.query;
+
+      // view=cf — ตัวเลือกทั้งหมด + คงเหลือ + ราคาล็อตล่าสุด + รหัส CF (ตั้งอัตโนมัติให้ตัวที่ยังไม่มี) สำหรับส่งออกไประบบไลฟ์
+      if (view === 'cf') {
+        const authUser = authenticate(req);
+        if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+        return res.status(200).json({ data: await listCfVariants(db, authUser.name) });
+      }
 
       // view=movements — ประวัติความเคลื่อนไหวสต๊อก เรียงล่าสุดก่อน (มีชื่อคนบันทึก/เลขออเดอร์ ต้องล็อกอิน)
       // from/to = เวลา ISO (หน้าเว็บแปลงวันที่ไทยให้แล้ว) · q = ค้นรหัส/ชื่อสินค้า/เลขออเดอร์ · type = in|sale|edit|delete
@@ -243,6 +251,34 @@ export default async function handler(req, res) {
     if (req.method === 'PUT') {
       const authUser = authenticate(req);
       if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+
+      // PUT /api/stock?action=cf — แก้รหัส CF ของตัวเลือก body: { sku, color, size, cf_code }
+      if (req.query.action === 'cf') {
+        const { sku, color = '', size = '' } = req.body || {};
+        const code = normalizeCfCode(req.body?.cf_code);
+        if (!sku) return res.status(400).json({ error: 'Missing sku' });
+        if (!CF_CODE_RE.test(code)) {
+          return res.status(400).json({ error: 'รหัส CF ต้องเป็นตัวอักษรอังกฤษ 1–4 ตัว ตามด้วยตัวเลข 1–4 ตัว เช่น A11, AB12' });
+        }
+        const dup = await db.execute({
+          sql: 'SELECT sku, color, size FROM cf_codes WHERE cf_code = ? AND NOT (sku = ? AND color = ? AND size = ?)',
+          args: [code, sku, color, size],
+        });
+        if (dup.rows[0]) {
+          const d = dup.rows[0];
+          return res.status(409).json({ error: `รหัส ${code} ใช้กับ ${[d.sku, d.color, d.size].filter(Boolean).join(' ')} อยู่แล้ว` });
+        }
+        const now = new Date().toISOString();
+        await db.execute({
+          sql: `INSERT INTO cf_codes (sku, color, size, cf_code, auto, updated_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 0, ?, ?, ?)
+                ON CONFLICT(sku, color, size) DO UPDATE SET cf_code = excluded.cf_code, auto = 0,
+                  updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+          args: [sku, color, size, code, authUser.name, now, now],
+        });
+        return res.status(200).json({ success: true, cf_code: code });
+      }
+
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: 'Missing id' });
 

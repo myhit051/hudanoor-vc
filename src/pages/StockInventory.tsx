@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   Package, Pencil, Trash2, Check, X, Search, AlertTriangle,
   TrendingDown, Boxes, CircleDollarSign, ShoppingCart,
-  Camera, ImagePlus, Loader2, SlidersHorizontal
+  Camera, ImagePlus, Loader2, SlidersHorizontal, Radio
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -19,6 +19,7 @@ import {
 } from "recharts";
 import { getStockInventory, getStockItems, deleteStockItem, updateStockItem, uploadProductImage, StockInventoryItem, StockItem } from "@/lib/stock-api";
 import { toast } from "@/hooks/use-toast";
+import { LiveCfExportDialog } from "@/components/stock/live-cf-export-dialog";
 
 const STATUS_COLORS = {
   out: "#ef4444",
@@ -28,6 +29,7 @@ const STATUS_COLORS = {
 
 export function StockInventory() {
   const queryClient = useQueryClient();
+  const [liveCfOpen, setLiveCfOpen] = useState(false);
 
   const { data: inventory = [], isLoading } = useQuery({
     queryKey: ['stock', { view: 'inventory' }],
@@ -221,13 +223,20 @@ export function StockInventory() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Package className="h-6 w-6 text-rose-500" />
-          สต๊อกคงเหลือ
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">แสดงสินค้าคงเหลือจากการรับเข้าและขายออก</p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Package className="h-6 w-6 text-rose-500" />
+            สต๊อกคงเหลือ
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">แสดงสินค้าคงเหลือจากการรับเข้าและขายออก</p>
+        </div>
+        <Button variant="outline" className="shrink-0 border-rose-300 text-rose-600 hover:bg-rose-50" onClick={() => setLiveCfOpen(true)}>
+          <Radio className="h-4 w-4 mr-2" />
+          ส่งออก CSV สำหรับ Live CF
+        </Button>
       </div>
+      <LiveCfExportDialog open={liveCfOpen} onOpenChange={setLiveCfOpen} />
 
       {/* Alert banner */}
       {lowStockItems.length > 0 && (

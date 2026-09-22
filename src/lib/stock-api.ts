@@ -142,6 +142,40 @@ export async function getStockMovements(params: { from?: string; to?: string; q?
   return data.data as StockMovement[];
 }
 
+/** 1 ตัวเลือก (SKU + สี + ไซส์) สำหรับส่งออกไประบบ HUDANOOR Live CF */
+export interface CfVariant {
+  sku: string;
+  color: string;
+  size: string;
+  product_name: string;
+  /** ราคาขายของล็อตที่รับเข้าล่าสุด */
+  price: number;
+  total_in: number;
+  sold: number;
+  /** คงเหลือพร้อมขาย (ไม่ติดลบ) */
+  stock: number;
+  cf_code: string;
+}
+
+/** รายการตัวเลือกทั้งหมด + รหัส CF (ตัวที่ยังไม่มีรหัสจะถูกตั้งให้อัตโนมัติ) */
+export async function getCfVariants(): Promise<CfVariant[]> {
+  const res = await fetch(`${API_BASE}/stock?view=cf`, { headers: getAuthHeaders() });
+  if (!res.ok) throw new Error('โหลดรายการรหัส CF ไม่สำเร็จ');
+  const data = await res.json();
+  return data.data as CfVariant[];
+}
+
+export async function updateCfCode(params: { sku: string; color: string; size: string; cf_code: string }): Promise<string> {
+  const res = await fetch(`${API_BASE}/stock?action=cf`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(params)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'บันทึกรหัส CF ไม่สำเร็จ');
+  return data.cf_code as string;
+}
+
 export async function getAvailableStock(): Promise<AvailableStockItem[]> {
   const res = await fetch(`${API_BASE}/stock?available=true`, {
     headers: getAuthHeaders()
