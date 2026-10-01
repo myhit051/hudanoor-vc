@@ -210,11 +210,16 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const { period, runId, action } = req.query;
 
-      // การลาของเดือน + สรุปต่อพนักงาน (มีเงินเดือน → Admin เท่านั้น)
+      // มีเงินเดือนทุก action → ต้องล็อกอิน · รายงานคอมใช้ในหน้าจัดการพนักงาน
+      // (พนักงานที่แอดมินเปิดเมนูให้ก็เปิดได้) ที่เหลือ Admin เท่านั้น
+      const authUser = authenticate(req);
+      if (!authUser) return res.status(401).json({ error: 'Unauthorized' });
+      if (action !== 'report' && !requireAdmin(authUser)) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+
+      // การลาของเดือน + สรุปต่อพนักงาน
       if (action === 'leaves') {
-        if (!requireAdmin(authenticate(req))) {
-          return res.status(403).json({ error: 'Admin access required' });
-        }
         if (!period || !/^\d{4}-\d{2}$/.test(period)) {
           return res.status(400).json({ error: 'period is required (YYYY-MM)' });
         }

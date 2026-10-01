@@ -87,6 +87,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
   - เปลี่ยนสถานะรายออเดอร์ต้องไม่ล้างรายการที่ติ๊กไว้อื่น
 - ความปลอดภัย: `GET` และ `POST /api/sales` ต้องล็อกอิน (ข้อมูลมีชื่อ/เบอร์/ที่อยู่ลูกค้า)
 - `POST/PUT/DELETE /api/stock` ต้องล็อกอิน (19 ก.ย. 2026 บอสสั่งปิด) · `GET /api/stock` (มีต้นทุน) ยังเปิดอยู่ ยกเว้น `view=movements`
+- `GET /api/employees` ต้องล็อกอิน · `GET /api/payroll` Admin เท่านั้น ยกเว้น `action=report` (รายงานคอมในหน้าจัดการพนักงาน) แค่ล็อกอิน (1 ต.ค. 2026 บอสสั่งปิด) — ฟังก์ชันหน้าเว็บที่เรียก API พวกนี้ต้องส่ง `authHeaders()`
 - เมนูใหม่ต้องให้แอดมินเปิดสิทธิ์ให้พนักงานเองในหน้าจัดการพนักงาน — แจ้งบอสทุกครั้ง
 - ฟีเจอร์ใหญ่ → บันทึกใน `openspec/changes/<ชื่อ>/` (proposal.md, tasks.md, specs/) ตามแบบที่มีอยู่ (ไม่มี openspec CLI ในเครื่อง)
 

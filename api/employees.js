@@ -44,6 +44,8 @@ export default async function handler(req, res) {
     const db = getTursoClient();
 
     if (req.method === 'GET') {
+      // มีเงินเดือน/เบอร์/ที่อยู่พนักงาน → ต้องล็อกอิน
+      if (!authenticate(req)) return res.status(401).json({ error: 'Unauthorized' });
       const result = await db.execute(
         `SELECT * FROM employees ORDER BY is_active DESC, created_at ASC`
       );

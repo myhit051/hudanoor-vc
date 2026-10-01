@@ -1,4 +1,5 @@
 import { EmployeeCommissionReport } from '@/types/employee';
+import { authHeaders } from '@/lib/auth-api';
 
 // API base URL - automatically detects environment
 const API_BASE = typeof window !== 'undefined' 
@@ -20,7 +21,7 @@ export const getCommissionReports = async (period?: string): Promise<CommissionR
       ? `${API_BASE}/payroll?action=report&period=${period}`
       : `${API_BASE}/payroll?action=report`;
       
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: { ...authHeaders() } });
     
     if (!response.ok) {
       const errorData = await response.json();
