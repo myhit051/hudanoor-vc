@@ -1,5 +1,7 @@
 import { authHeaders } from '@/lib/auth-api';
-import { PayrollItem, PayrollItemStatus, PayrollPreviewItem, PayrollRun } from '@/types/payroll';
+import {
+  EmployeeLeave, LeaveSummaryEmployee, LeaveType, PayrollItem, PayrollItemStatus, PayrollPreviewItem, PayrollRun,
+} from '@/types/payroll';
 
 const API_BASE = typeof window !== 'undefined'
   ? (window.location.hostname === 'localhost' ? 'http://localhost:3000/api' : '/api')
@@ -137,6 +139,52 @@ export async function deletePayrollRun(runId: string) {
   const res = await fetch(`${API_BASE}/payroll?runId=${encodeURIComponent(runId)}`, {
     method: 'DELETE',
     headers: { ...authHeaders() },
+  });
+  return handleJson(res);
+}
+
+// ─── การลา (Admin เท่านั้น) ───
+export async function getLeaves(period: string): Promise<{ employees: LeaveSummaryEmployee[]; leaves: EmployeeLeave[] }> {
+  const res = await fetch(`${API_BASE}/payroll?action=leaves&period=${encodeURIComponent(period)}`, {
+    headers: { ...authHeaders() },
+  });
+  const data = await handleJson(res);
+  return {
+    employees: Array.isArray(data?.employees) ? data.employees : [],
+    leaves: Array.isArray(data?.leaves) ? data.leaves : [],
+  };
+}
+
+export async function addLeave(input: {
+  employeeId: string;
+  startDate: string;
+  endDate?: string;
+  halfDay: boolean;
+  leaveType: LeaveType;
+  note?: string;
+}): Promise<{ created: number }> {
+  const res = await fetch(`${API_BASE}/payroll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ action: 'add-leave', ...input }),
+  });
+  return handleJson(res);
+}
+
+export async function deleteLeave(id: string) {
+  const res = await fetch(`${API_BASE}/payroll?action=delete-leave&id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { ...authHeaders() },
+  });
+  return handleJson(res);
+}
+
+// employeeId = รายคน · all = ทุกคนที่ยังทำงาน · quota null = ยกเลิก (ไม่หัก)
+export async function setLeaveQuota(target: { employeeId: string } | { all: true }, quota: number | null) {
+  const res = await fetch(`${API_BASE}/payroll`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ action: 'set-leave-quota', ...target, quota }),
   });
   return handleJson(res);
 }

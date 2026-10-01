@@ -10,6 +10,7 @@ import Index from "@/pages/Index";
 import { TaskReminder } from "@/pages/TaskReminder";
 import { EmployeeManagement } from "@/pages/EmployeeManagement";
 import Payroll from "@/pages/Payroll";
+import { Leaves } from "@/pages/Leaves";
 import { UpdateLogs } from "@/pages/UpdateLogs";
 import { AppSettings } from "@/pages/AppSettings";
 import { StockReceiving } from "@/pages/StockReceiving";
@@ -35,6 +36,7 @@ const pathToPage: Record<string, string> = {
   '/task-reminder': 'task-reminder',
   '/employees': 'employees',
   '/payroll': 'payroll',
+  '/leaves': 'leaves',
   '/update-logs': 'update-logs',
   '/settings': 'settings',
   '/admin': 'admin-panel',
@@ -64,7 +66,7 @@ export function MainLayout() {
       navigate('/login');
     } else if (!isLoading && isAuthenticated && !isAdmin && currentPage !== 'dashboard') {
       // Only redirect if user doesn't have access to this specific page
-      if (currentPage === 'admin-panel' || currentPage === 'payroll' ||
+      if (currentPage === 'admin-panel' || currentPage === 'payroll' || currentPage === 'leaves' ||
           (user?.allowedMenus && !user.allowedMenus.includes(currentPage) && currentPage !== 'add-record')) {
         navigate('/');
       }
@@ -118,6 +120,8 @@ export function MainLayout() {
         return <EmployeeManagement />;
       case 'payroll':
         return isAdmin ? <Payroll /> : <Index />;
+      case 'leaves':
+        return isAdmin ? <Leaves /> : <Index />;
       case 'update-logs':
         return <UpdateLogs />;
       case 'settings':

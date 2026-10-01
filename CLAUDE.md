@@ -23,15 +23,15 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 เจ้าของร้าน (เรียกว่า "บอส") ไม่ใช่โปรแกรมเมอร์ — ตอบภาษาไทยง่าย ๆ เลี่ยงศัพท์เทคนิค
 
 ## ไฟล์เสริม (อ่านเมื่อจำเป็น)
-- `AI_HISTORY.md` — ประวัติคำขอของบอสทีละเรื่อง (17–22 ก.ย. 2026) + เหตุผล + งานค้าง → อ่านก่อนแก้ฟีเจอร์ขาย/จัดส่ง/ค่าส่ง/COD/สต๊อก/Live CF และก่อนเสนอไอเดียใหม่ (อาจเคยเสนอ/ปฏิเสธไปแล้ว)
+- `AI_HISTORY.md` — ประวัติคำขอของบอสทีละเรื่อง (17 ก.ย.–1 ต.ค. 2026) + เหตุผล + งานค้าง → อ่านก่อนแก้ฟีเจอร์ขาย/จัดส่ง/ค่าส่ง/COD/สต๊อก/Live CF และก่อนเสนอไอเดียใหม่ (อาจเคยเสนอ/ปฏิเสธไปแล้ว)
 - `AI_TESTING.md` — วิธีทดสอบ API กับ SQLite จำลอง และทดสอบหน้าเว็บด้วย Playwright + API ปลอม → อ่านก่อนทดสอบทุกครั้ง
-- `openspec/changes/*` — ข้อเสนอฟีเจอร์ (ล่าสุด `add-live-cf-export`, `add-stock-movements`) → อัปเดตเมื่อเพิ่มฟีเจอร์ใหญ่
+- `openspec/changes/*` — ข้อเสนอฟีเจอร์ (ล่าสุด `add-employee-leaves`, `add-live-cf-export`) → อัปเดตเมื่อเพิ่มฟีเจอร์ใหญ่
 - `AGENTS.md` = บล็อก OpenSpec ของเครื่องมือ openspec (Codex อ่านไฟล์นั้น) — ไม่ใช่คู่มือโปรเจกต์ อย่าเขียนซ้ำ
 
 ## ลิงก์สำคัญ
 - https://hudanoor-vc.vercel.app — เว็บจริง (Vercel)
   - `/sales-entry` บันทึกยอดขาย · `/order-history` ประวัติการขาย+กำไร · `/shipping` จัดส่ง/พิมพ์ใบปะหน้า
-  - `/stock-receiving` รับของ · `/stock-inventory` สต๊อกคงเหลือ · `/stock-value` มูลค่าสต๊อก · `/stock-movements` ความเคลื่อนไหวสต๊อก · `/employees` · `/payroll` (admin) · `/settings`
+  - `/stock-receiving` รับของ · `/stock-inventory` สต๊อกคงเหลือ · `/stock-value` มูลค่าสต๊อก · `/stock-movements` ความเคลื่อนไหวสต๊อก · `/employees` · `/payroll` (admin) · `/leaves` บันทึกการลา (admin) · `/settings`
   - `/api/*` = Vercel serverless functions ในโฟลเดอร์ `api/`
 - https://github.com/myhit051/hudanoor-vc — repo (branch `main`) **push แล้ว Vercel deploy เองอัตโนมัติ** ไม่ต้องใช้ azhub-publish / pm2
 - `/root/projects/HUDANOOR-Live-CF-Platform` — ระบบไลฟ์ขาย CF ของร้าน (โปรเจกต์แยก รันบน VPS นี้ด้วย pm2 `hudanoor-dashboard`) รับไฟล์ CSV สินค้าจากหน้าสต๊อกคงเหลือ · **อ่านโค้ดได้ ห้ามแก้จากโปรเจกต์นี้** — งานฝั่งนั้นส่งต่อด้วยไฟล์ handoff
@@ -42,6 +42,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - หน้าเว็บ: Vite + React + TS + shadcn/ui + Tailwind + react-query (`src/`)
   - เพิ่มหน้าใหม่ต้องแก้ 3 จุด: `src/components/layout/main-layout.tsx` (route), `sidebar.tsx` (เมนู), `src/components/employees/employee-accounts.tsx` (`MENU_OPTIONS` สิทธิ์เมนู)
 - API: `api/*.js` (Node, ESM) · ฐานข้อมูล Turso/libSQL ผ่าน `lib/turso.js`
+  - **มี 12 ไฟล์ = เพดานฟังก์ชันของ Vercel ฟรีแล้ว ห้ามเพิ่มไฟล์ใน `api/`** → ใส่เป็น `action` ในไฟล์เดิม (เช่น การลาอยู่ใน `api/payroll.js`)
   - ตารางใหม่/คอลัมน์ใหม่ → เพิ่มใน `migrations` ของ `initSchema()` (ALTER TABLE ... ถูกกลืน error ถ้ามีแล้ว) ไม่มีระบบ migration อื่น
 - Settings ร้าน (ชื่อ/เบอร์/ที่อยู่ร้าน, สาขาตามช่องทาง) เก็บใน Google Sheets ผ่าน `api/settings.js` → `useSettings()` (`storeName`, `storePhone`, `storeAddress`, `branchesByChannel`)
 - Auth: JWT (`lib/jwt.js`, `lib/auth-middleware.js`) · หน้าเว็บเก็บ token ใน `localStorage.token` และส่ง `Authorization: Bearer` ทุก request
@@ -64,6 +65,12 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - ตารางสินค้าในออเดอร์ใช้ร่วมกันที่ `src/components/sales/order-items-editor.tsx` (หน้าบันทึกยอดขาย + หน้าต่างแก้ไข)
 - ส่งออกไประบบไลฟ์ `HUDANOOR Live CF` (โปรเจกต์ `/root/projects/HUDANOOR-Live-CF-Platform` บน VPS นี้): หน้าสต๊อกคงเหลือ → ปุ่ม "ส่งออก CSV สำหรับ Live CF" · รหัส CF ถาวรในตาราง `cf_codes` ต่อ sku+สี+ไซส์ (`lib/cf-codes.js`) ต้องตรง `/^[A-Z]{1,4}\d{1,4}$/` เพราะตัวอ่านคอมเมนต์ในไลฟ์ (`packages/domain-cf/src/parser.ts`) อ่านได้แค่นี้ · **ห้ามเปลี่ยนรหัสที่ตั้งแล้วอัตโนมัติ** (ระบบไลฟ์ใช้รหัสจับคู่สินค้า) · ตรวจไฟล์ด้วย `parseProductImport` ของระบบไลฟ์ (รันด้วย tsx ของโปรเจกต์นั้น) · CSV มีคอลัมน์เสริม `product_code` (SKU ที่เข้ารูปแบบ, ไม่งั้นว่าง) `color` `size` `sku` ไว้ให้ระบบไลฟ์จับคู่คอมเมนต์ "A08 ดำ M" (22 ก.ย. 2026 บอสให้ส่งต่องานฝั่งไลฟ์ให้ AI ของโปรเจกต์นั้น — ห้ามแก้โปรเจกต์ไลฟ์เองจากที่นี่)
 - `legacy_sales` = ข้อมูลเก่าจาก Sheet/รายรับ manual — ไม่มี order_id, ไม่มีสถานะจัดส่ง, ถูกกรองออกจากหน้าจัดส่ง
+
+## การลา + หักลาเกิน (เพิ่ม 1 ต.ค. 2026)
+- ตาราง `employee_leaves` (1 แถว = 1 วัน, `days` 1 หรือ 0.5) · วันลาที่ได้ต่อเดือน `employees.leave_quota_days` (NULL = ยังไม่ตั้ง → **ไม่หัก**)
+- สูตร (`lib/leaves.js`): วันเกิน = ลารวมในเดือน − วันที่ได้ · หัก = วันเกิน × เงินเดือน ÷ 25 · **หักจากคอมก่อน คอมไม่พอหักจากเงินเดือน** (บอสเลือก) ยอดรับไม่ติดลบ · ลาทุกประเภทนับรวม
+- `payroll_items.total_amount` = เงินเดือน + คอม − `leave_deduction` + ปรับปรุง · ค่าการลาเป็น snapshot ตอนสร้างรอบ/คำนวณใหม่ (รอบที่ปิดแล้วไม่เปลี่ยน)
+- API ใน `api/payroll.js` (Admin ทั้งหมด): `GET ?action=leaves&period=` · `POST {action:'add-leave'}` · `PUT {action:'set-leave-quota'}` · `DELETE ?action=delete-leave&id=`
 
 ## กติกาที่ตกลงกับบอสแล้ว (อย่าเปลี่ยนเองโดยไม่ถาม)
 - หน้าบันทึกยอดขาย:

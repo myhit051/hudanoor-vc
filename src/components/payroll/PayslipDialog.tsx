@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Download, Printer } from "lucide-react";
 import { PayrollItem, PayrollRun } from "@/types/payroll";
 import { formatCurrency } from "@/lib/utils";
+import { formatDays, splitLeaveDeduction } from "@/lib/leave-utils";
 
 interface PayslipDialogProps {
   open: boolean;
@@ -79,6 +80,7 @@ export function PayslipDialog({ open, onOpenChange, item, run, shopName = "HUDAN
   if (!item || !run) return null;
 
   const baseAmount = item.salary + item.totalCommission;
+  const leaveSplit = splitLeaveDeduction(item.leaveDeduction, item.totalCommission);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -191,6 +193,50 @@ export function PayslipDialog({ open, onOpenChange, item, run, shopName = "HUDAN
               </tbody>
             </table>
           </div>
+
+          {/* Leave + deduction */}
+          {(item.leaveDays > 0 || item.leaveDeduction > 0) && (
+            <div className="mb-4">
+              <div className="text-sm font-semibold mb-2 text-gray-700">การลา / รายการหัก</div>
+              <table className="w-full text-sm border-collapse">
+                <tbody>
+                  <tr>
+                    <td className="p-2 border" colSpan={2}>
+                      ลาเดือนนี้ {formatDays(item.leaveDays)} วัน
+                      {item.leaveQuota !== null
+                        ? ` · ลาได้ ${formatDays(item.leaveQuota)} วัน/เดือน`
+                        : " · ยังไม่ได้ตั้งวันลาที่ได้ (ไม่หัก)"}
+                    </td>
+                  </tr>
+                  {item.leaveDeduction > 0 && (
+                    <>
+                      <tr>
+                        <td className="p-2 border">
+                          หักลาเกิน {formatDays(item.leaveExcessDays)} วัน × {formatCurrency(item.salary / 25)} (เงินเดือน ÷ 25)
+                          {item.leaveDeduction < (item.leaveExcessDays * item.salary) / 25 - 0.005 && " · หักได้ไม่เกินยอดรับ"}
+                        </td>
+                        <td className="p-2 border text-right text-red-600 font-medium">
+                          −{formatCurrency(item.leaveDeduction)}
+                        </td>
+                      </tr>
+                      {leaveSplit.fromCommission > 0 && (
+                        <tr className="text-gray-600">
+                          <td className="p-2 pl-6 border">หักจากคอม</td>
+                          <td className="p-2 border text-right">{formatCurrency(leaveSplit.fromCommission)}</td>
+                        </tr>
+                      )}
+                      {leaveSplit.fromSalary > 0 && (
+                        <tr className="text-gray-600">
+                          <td className="p-2 pl-6 border">หักจากเงินเดือน (คอมไม่พอ)</td>
+                          <td className="p-2 border text-right">{formatCurrency(leaveSplit.fromSalary)}</td>
+                        </tr>
+                      )}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Adjustment */}
           {(item.adjustment !== 0 || item.adjustmentNote) && (

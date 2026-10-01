@@ -18,10 +18,14 @@ export interface PayrollItem {
   homeBranch: string;
   salary: number;
   totalCommission: number;
-  totalAmount: number;                  // salary + totalCommission + adjustment
+  totalAmount: number;                  // salary + totalCommission - leaveDeduction + adjustment
   commissionBreakdown: PayrollCommissionLine[];
   adjustment: number;                   // โบนัส/หักเพิ่ม (+/-)
   adjustmentNote: string;
+  leaveDays: number;                    // วันลาในงวดนี้ (ตอนคำนวณล่าสุด)
+  leaveQuota: number | null;            // วันลาที่ได้ต่อเดือน — null = ยังไม่ตั้ง (ไม่หัก)
+  leaveExcessDays: number;
+  leaveDeduction: number;               // หักลาเกิน (บวก) — หักจากคอมก่อน ไม่พอหักจากเงินเดือน
   status: PayrollItemStatus;
   paidAt: string;
   paidBy: string;
@@ -56,5 +60,36 @@ export interface PayrollPreviewItem {
   totalCommission: number;
   totalAmount: number;
   commissionBreakdown: PayrollCommissionLine[];
+  leaveDays: number;
+  leaveQuota: number | null;
+  leaveExcessDays: number;
+  leaveDeduction: number;
   status: PayrollItemStatus;
+}
+
+export type LeaveType = 'sick' | 'personal' | 'other';
+
+export interface EmployeeLeave {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;                         // YYYY-MM-DD
+  days: number;                         // 1 หรือ 0.5
+  leaveType: LeaveType;
+  note: string;
+  recordedBy: string;
+  createdAt: string;
+}
+
+export interface LeaveSummaryEmployee {
+  id: string;
+  name: string;
+  position: string;
+  homeBranch: string;
+  salary: number;
+  leaveQuota: number | null;
+  leaveDays: number;
+  excessDays: number;
+  dailyRate: number;                    // เงินเดือน ÷ 25
+  deduction: number;                    // ยังไม่จำกัดเพดานตามยอดคอม+เงินเดือน (หน้าจ่ายเงินเดือนจำกัดให้)
 }

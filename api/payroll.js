@@ -2,6 +2,10 @@ import { google } from 'googleapis';
 import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate, requireAdmin } from '../lib/auth-middleware.js';
 import { parseSheetDate } from '../lib/sheet-date.js';
+import {
+  LEAVE_TYPES, calcLeaveDeduction, expandDates, isValidDate, loadLeaveDaysByEmployee,
+  normalizeQuota, rowToLeave,
+} from '../lib/leaves.js';
 
 // Read all rows from a Google Sheet range (used for legacy import).
 // Use UNFORMATTED_VALUE so date cells come back as Excel serial numbers
@@ -83,6 +87,10 @@ function rowToItem(row) {
     commissionBreakdown: safeParseJSON(row.commission_breakdown, []),
     adjustment: Number(row.adjustment) || 0,
     adjustmentNote: row.adjustment_note || '',
+    leaveDays: Number(row.leave_days) || 0,
+    leaveQuota: normalizeQuota(row.leave_quota),
+    leaveExcessDays: Number(row.leave_excess_days) || 0,
+    leaveDeduction: Number(row.leave_deduction) || 0,
     status: row.status,
     paidAt: row.paid_at || '',
     paidBy: row.paid_by || '',
@@ -90,6 +98,35 @@ function rowToItem(row) {
     note: row.note || '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function rowToPayrollEmployee(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    position: row.position || '',
+    homeBranch: row.home_branch || '',
+    salary: Number(row.salary) || 0,
+    branchCommissions: safeParseJSON(row.branch_commissions, []),
+    leaveQuota: normalizeQuota(row.leave_quota_days),
+  };
+}
+
+// เงินเดือน + คอม − หักลาเกิน (ยังไม่รวมช่อง "ปรับปรุง")
+function computePayrollItem(emp, incomes, leaveDaysByEmp) {
+  const { breakdown, totalCommission } = calcEmployeeCommission(emp, incomes);
+  const leave = calcLeaveDeduction({
+    salary: emp.salary,
+    commission: totalCommission,
+    quota: emp.leaveQuota,
+    days: leaveDaysByEmp.get(emp.id) || 0,
+  });
+  return {
+    breakdown,
+    totalCommission,
+    leave,
+    baseAmount: emp.salary + totalCommission - leave.deduction,
   };
 }
 
@@ -172,6 +209,45 @@ export default async function handler(req, res) {
     // ─── GET ───────────────────────────────────────────
     if (req.method === 'GET') {
       const { period, runId, action } = req.query;
+
+      // การลาของเดือน + สรุปต่อพนักงาน (มีเงินเดือน → Admin เท่านั้น)
+      if (action === 'leaves') {
+        if (!requireAdmin(authenticate(req))) {
+          return res.status(403).json({ error: 'Admin access required' });
+        }
+        if (!period || !/^\d{4}-\d{2}$/.test(period)) {
+          return res.status(400).json({ error: 'period is required (YYYY-MM)' });
+        }
+        const [empResult, leaveResult, leaveDaysByEmp] = await Promise.all([
+          db.execute(`SELECT * FROM employees WHERE is_active = 1 ORDER BY name`),
+          db.execute({
+            sql: `SELECT * FROM employee_leaves WHERE date LIKE ? ORDER BY date DESC, created_at DESC`,
+            args: [`${period}-%`],
+          }),
+          loadLeaveDaysByEmployee(db, period),
+        ]);
+        const employees = empResult.rows.map((row) => {
+          const emp = rowToPayrollEmployee(row);
+          const leave = calcLeaveDeduction({
+            salary: emp.salary,
+            quota: emp.leaveQuota,
+            days: leaveDaysByEmp.get(emp.id) || 0,
+          });
+          return {
+            id: emp.id,
+            name: emp.name,
+            position: emp.position,
+            homeBranch: emp.homeBranch,
+            salary: emp.salary,
+            leaveQuota: emp.leaveQuota,
+            leaveDays: leave.leaveDays,
+            excessDays: leave.excessDays,
+            dailyRate: leave.dailyRate,
+            deduction: leave.deduction,
+          };
+        });
+        return res.status(200).json({ period, employees, leaves: leaveResult.rows.map(rowToLeave) });
+      }
 
       // Preview legacy sales import — show counts based on row position
       // (we ignore the ID column because it has duplicates / blanks)
@@ -281,18 +357,12 @@ export default async function handler(req, res) {
         const empResult = await db.execute(
           `SELECT * FROM employees WHERE is_active = 1 ORDER BY name`
         );
-        const employees = empResult.rows.map((row) => ({
-          id: row.id,
-          name: row.name || '',
-          position: row.position || '',
-          homeBranch: row.home_branch || '',
-          salary: Number(row.salary) || 0,
-          branchCommissions: safeParseJSON(row.branch_commissions, []),
-        }));
+        const employees = empResult.rows.map(rowToPayrollEmployee);
 
         const incomes = await loadIncomesForPeriod(period);
+        const leaveDaysByEmp = await loadLeaveDaysByEmployee(db, period);
         const items = employees.map((emp) => {
-          const { breakdown, totalCommission } = calcEmployeeCommission(emp, incomes);
+          const { breakdown, totalCommission, leave, baseAmount } = computePayrollItem(emp, incomes, leaveDaysByEmp);
           return {
             employeeId: emp.id,
             employeeName: emp.name,
@@ -300,8 +370,12 @@ export default async function handler(req, res) {
             homeBranch: emp.homeBranch,
             salary: emp.salary,
             totalCommission,
-            totalAmount: emp.salary + totalCommission,
+            totalAmount: baseAmount,
             commissionBreakdown: breakdown,
+            leaveDays: leave.leaveDays,
+            leaveQuota: leave.quota,
+            leaveExcessDays: leave.excessDays,
+            leaveDeduction: leave.deduction,
             status: 'pending',
           };
         });
@@ -444,6 +518,50 @@ export default async function handler(req, res) {
         });
       }
 
+      // บันทึกการลา: 1 วัน หรือช่วงวันที่ (1 แถวต่อวัน) · ครึ่งวันได้เฉพาะวันเดียว
+      if (req.body?.action === 'add-leave') {
+        const { employeeId, startDate, endDate, halfDay, leaveType, note: leaveNote } = req.body;
+        if (!employeeId) return res.status(400).json({ error: 'กรุณาเลือกพนักงาน' });
+        if (!isValidDate(startDate)) return res.status(400).json({ error: 'วันที่ไม่ถูกต้อง' });
+        const lastDate = halfDay || !endDate ? startDate : endDate;
+        if (!isValidDate(lastDate) || lastDate < startDate) {
+          return res.status(400).json({ error: 'ถึงวันที่ต้องไม่ก่อนวันเริ่มลา' });
+        }
+        const dates = expandDates(startDate, lastDate);
+        if (!dates) return res.status(400).json({ error: 'บันทึกได้ครั้งละไม่เกิน 31 วัน' });
+        const type = LEAVE_TYPES.includes(leaveType) ? leaveType : 'other';
+        const days = halfDay ? 0.5 : 1;
+
+        const empResult = await db.execute({
+          sql: 'SELECT id, name FROM employees WHERE id = ? AND is_active = 1',
+          args: [employeeId],
+        });
+        if (empResult.rows.length === 0) return res.status(400).json({ error: 'ไม่พบพนักงานนี้' });
+        const empName = empResult.rows[0].name || '';
+
+        // วันเดียวกันรวมกันได้ไม่เกิน 1 วัน (เช่น ครึ่งวันเช้า + ครึ่งวันบ่าย)
+        const existing = await db.execute({
+          sql: `SELECT date, SUM(days) AS total FROM employee_leaves
+                WHERE employee_id = ? AND date IN (${dates.map(() => '?').join(',')}) GROUP BY date`,
+          args: [employeeId, ...dates],
+        });
+        const clashes = existing.rows.filter((r) => (Number(r.total) || 0) + days > 1).map((r) => r.date);
+        if (clashes.length > 0) {
+          return res.status(409).json({ error: `วันที่ ${clashes.join(', ')} บันทึกลาไว้แล้ว`, dates: clashes });
+        }
+
+        const now = new Date().toISOString();
+        const stamp = Date.now();
+        await db.batch(dates.map((date, i) => ({
+          sql: `INSERT INTO employee_leaves
+                (id, employee_id, employee_name, date, days, leave_type, note, recorded_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [`leave_${stamp}_${i}_${Math.random().toString(36).slice(2, 8)}`, employeeId, empName,
+            date, days, type, String(leaveNote || '').trim(), authUser?.name || '', now],
+        })), 'write');
+        return res.status(200).json({ success: true, created: dates.length });
+      }
+
       const { period, regenerate, note } = req.body || {};
       if (!period || !/^\d{4}-\d{2}$/.test(period)) {
         return res.status(400).json({ error: 'period is required (YYYY-MM)' });
@@ -471,34 +589,28 @@ export default async function handler(req, res) {
       const empResult = await db.execute(
         `SELECT * FROM employees WHERE is_active = 1 ORDER BY name`
       );
-      const employees = empResult.rows.map((row) => ({
-        id: row.id,
-        name: row.name || '',
-        position: row.position || '',
-        homeBranch: row.home_branch || '',
-        salary: Number(row.salary) || 0,
-        branchCommissions: safeParseJSON(row.branch_commissions, []),
-      }));
+      const employees = empResult.rows.map(rowToPayrollEmployee);
 
       const incomes = await loadIncomesForPeriod(period);
+      const leaveDaysByEmp = await loadLeaveDaysByEmployee(db, period);
       const now = new Date().toISOString();
       const runId = existing.rows.length > 0 ? existing.rows[0].id : `prun_${Date.now()}`;
 
       // Compute items
       const computed = employees.map((emp) => {
-        const { breakdown, totalCommission } = calcEmployeeCommission(emp, incomes);
+        const { breakdown, totalCommission, leave, baseAmount } = computePayrollItem(emp, incomes, leaveDaysByEmp);
         return {
           id: `pitem_${runId}_${emp.id}`,
           employee: emp,
           totalCommission,
           breakdown,
-          totalAmount: emp.salary + totalCommission,
+          leave,
+          totalAmount: baseAmount,
         };
       });
 
       const totalSalary = computed.reduce((s, c) => s + c.employee.salary, 0);
       const totalCommission = computed.reduce((s, c) => s + c.totalCommission, 0);
-      const totalAmount = totalSalary + totalCommission;
 
       if (existing.rows.length > 0) {
         // Regenerate: preserve paid status + adjustments by employee_id
@@ -511,6 +623,7 @@ export default async function handler(req, res) {
 
         await db.execute({ sql: 'DELETE FROM payroll_items WHERE payroll_run_id = ?', args: [runId] });
 
+        let totalAmount = 0;
         for (const c of computed) {
           const prev = byEmp.get(c.employee.id);
           const adjustment = prev ? Number(prev.adjustment) || 0 : 0;
@@ -520,18 +633,21 @@ export default async function handler(req, res) {
           const paidBy = prev ? prev.paid_by || '' : '';
           const paidMethod = prev ? prev.paid_method || '' : '';
           const itemNote = prev ? prev.note || '' : '';
-          const finalAmount = c.employee.salary + c.totalCommission + adjustment;
+          const finalAmount = c.totalAmount + adjustment;
+          totalAmount += finalAmount;
           await db.execute({
             sql: `INSERT INTO payroll_items (
               id, payroll_run_id, employee_id, employee_name, position, home_branch,
               salary, total_commission, total_amount, commission_breakdown,
               adjustment, adjustment_note, status, paid_at, paid_by, paid_method, note,
+              leave_days, leave_quota, leave_excess_days, leave_deduction,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [
               c.id, runId, c.employee.id, c.employee.name, c.employee.position, c.employee.homeBranch,
               c.employee.salary, c.totalCommission, finalAmount, JSON.stringify(c.breakdown),
               adjustment, adjustmentNote, status, paidAt, paidBy, paidMethod, itemNote,
+              c.leave.leaveDays, c.leave.quota, c.leave.excessDays, c.leave.deduction,
               prev ? prev.created_at : now, now,
             ],
           });
@@ -544,6 +660,7 @@ export default async function handler(req, res) {
             note ?? existing.rows[0].note ?? '', now, runId],
         });
       } else {
+        const totalAmount = computed.reduce((s, c) => s + c.totalAmount, 0);
         await db.execute({
           sql: `INSERT INTO payroll_runs (
             id, period, status, total_salary, total_commission, total_amount,
@@ -558,11 +675,13 @@ export default async function handler(req, res) {
             sql: `INSERT INTO payroll_items (
               id, payroll_run_id, employee_id, employee_name, position, home_branch,
               salary, total_commission, total_amount, commission_breakdown,
+              leave_days, leave_quota, leave_excess_days, leave_deduction,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [
               c.id, runId, c.employee.id, c.employee.name, c.employee.position, c.employee.homeBranch,
               c.employee.salary, c.totalCommission, c.totalAmount, JSON.stringify(c.breakdown),
+              c.leave.leaveDays, c.leave.quota, c.leave.excessDays, c.leave.deduction,
               now, now,
             ],
           });
@@ -592,6 +711,26 @@ export default async function handler(req, res) {
 
       const { itemId, runId, action, updates } = req.body || {};
       const now = new Date().toISOString();
+
+      // ตั้งวันลาที่ได้ต่อเดือน — รายคน (employeeId) หรือทุกคนที่ยังทำงาน (all) · quota null = ยกเลิก (ไม่หัก)
+      if (action === 'set-leave-quota') {
+        const { employeeId, all } = req.body;
+        const quota = normalizeQuota(req.body.quota);
+        if (quota !== null && (quota < 0 || quota > 31 || quota * 2 !== Math.round(quota * 2))) {
+          return res.status(400).json({ error: 'วันลาต้องเป็น 0–31 วัน (ทีละครึ่งวัน)' });
+        }
+        if (!all && !employeeId) return res.status(400).json({ error: 'employeeId is required' });
+        const result = all
+          ? await db.execute({
+            sql: 'UPDATE employees SET leave_quota_days = ?, updated_at = ? WHERE is_active = 1',
+            args: [quota, now],
+          })
+          : await db.execute({
+            sql: 'UPDATE employees SET leave_quota_days = ?, updated_at = ? WHERE id = ?',
+            args: [quota, now, employeeId],
+          });
+        return res.status(200).json({ success: true, updated: Number(result.rowsAffected) || 0 });
+      }
 
       // Finalize a run
       if (action === 'finalize' && runId) {
@@ -651,7 +790,8 @@ export default async function handler(req, res) {
           sets.push('adjustment = ?', 'adjustment_note = ?');
           args.push(adjustment, adjustmentNote);
           // Recompute total_amount
-          const newTotal = (Number(current.salary) || 0) + (Number(current.total_commission) || 0) + adjustment;
+          const newTotal = (Number(current.salary) || 0) + (Number(current.total_commission) || 0)
+            - (Number(current.leave_deduction) || 0) + adjustment;
           sets.push('total_amount = ?');
           args.push(newTotal);
         }
@@ -704,6 +844,13 @@ export default async function handler(req, res) {
       if (!requireAdmin(authUser)) {
         return res.status(403).json({ error: 'Admin access required' });
       }
+      if (req.query.action === 'delete-leave') {
+        if (!req.query.id) return res.status(400).json({ error: 'id is required' });
+        const result = await db.execute({ sql: 'DELETE FROM employee_leaves WHERE id = ?', args: [req.query.id] });
+        if (!Number(result.rowsAffected)) return res.status(404).json({ error: 'ไม่พบรายการลานี้' });
+        return res.status(200).json({ success: true });
+      }
+
       const { runId } = req.query;
       if (!runId) return res.status(400).json({ error: 'runId is required' });
 

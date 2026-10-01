@@ -23,7 +23,8 @@ import {
   Wallet,
   CircleDollarSign,
   ArrowLeftRight,
-  Truck
+  Truck,
+  CalendarOff
 } from "lucide-react";
 
 interface SidebarProps {
@@ -58,6 +59,7 @@ const menuGroups = [
     label: "การเงิน",
     items: [
       { id: "payroll",          label: "จ่ายเงินเดือน",    icon: Wallet, adminOnly: true },
+      { id: "leaves",           label: "บันทึกการลา",     icon: CalendarOff, adminOnly: true },
     ],
   },
   {

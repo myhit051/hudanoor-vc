@@ -18,6 +18,7 @@ import {
   Lock, Unlock, AlertCircle, Receipt, Trash2, Pencil, Building2, DownloadCloud,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { formatDays } from "@/lib/leave-utils";
 import { usePayrollByPeriod, usePayrollMutations, usePayrollRuns } from "@/hooks/use-payroll";
 import { PayslipDialog } from "@/components/payroll/PayslipDialog";
 import { PayrollItem } from "@/types/payroll";
@@ -74,10 +75,11 @@ export default function Payroll() {
     const totalSalary = items.reduce((s, it) => s + it.salary, 0);
     const totalCommission = items.reduce((s, it) => s + it.totalCommission, 0);
     const totalAdjustment = items.reduce((s, it) => s + (it.adjustment || 0), 0);
+    const totalLeaveDeduction = items.reduce((s, it) => s + (it.leaveDeduction || 0), 0);
     const totalAmount = items.reduce((s, it) => s + it.totalAmount, 0);
     const paidCount = items.filter((it) => it.status === "paid").length;
     const paidAmount = items.filter((it) => it.status === "paid").reduce((s, it) => s + it.totalAmount, 0);
-    return { totalSalary, totalCommission, totalAdjustment, totalAmount, paidCount, paidAmount };
+    return { totalSalary, totalCommission, totalAdjustment, totalLeaveDeduction, totalAmount, paidCount, paidAmount };
   }, [items]);
 
   const branchGroups = useMemo(() => {
@@ -177,7 +179,7 @@ export default function Payroll() {
             จ่ายเงินเดือน
           </h1>
           <p className="text-muted-foreground mt-1">
-            สรุปยอดเงินเดือน + คอม สำหรับพนักงาน — แยกตามสาขา ออกใบแจ้งเป็น PDF ได้
+            สรุปยอดเงินเดือน + คอม − หักลาเกิน สำหรับพนักงาน — แยกตามสาขา ออกใบแจ้งเป็น PDF ได้
           </p>
         </div>
 
@@ -270,7 +272,7 @@ export default function Payroll() {
       </Card>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200">
           <CardContent className="p-4">
             <div className="text-sm text-blue-700">เงินเดือนรวม</div>
@@ -283,6 +285,14 @@ export default function Payroll() {
             <div className="text-xl font-bold text-emerald-800">{formatCurrency(totals.totalCommission)}</div>
           </CardContent>
         </Card>
+        <Card className="bg-gradient-to-br from-red-50 to-rose-50 border-red-200">
+          <CardContent className="p-4">
+            <div className="text-sm text-red-700">หักลาเกินรวม</div>
+            <div className="text-xl font-bold text-red-800">
+              {totals.totalLeaveDeduction > 0 ? "−" : ""}{formatCurrency(totals.totalLeaveDeduction)}
+            </div>
+          </CardContent>
+        </Card>
         <Card className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200">
           <CardContent className="p-4">
             <div className="text-sm text-amber-700">ปรับปรุงรวม</div>
@@ -291,7 +301,7 @@ export default function Payroll() {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-gradient-to-br from-rose-50 to-pink-50 border-rose-200">
+        <Card className="col-span-2 lg:col-span-1 bg-gradient-to-br from-rose-50 to-pink-50 border-rose-200">
           <CardContent className="p-4">
             <div className="text-sm text-rose-700">รวมต้องจ่าย</div>
             <div className="text-xl font-bold text-rose-800">{formatCurrency(totals.totalAmount)}</div>
@@ -340,6 +350,7 @@ export default function Payroll() {
                         <TableHead>สาขาประจำ</TableHead>
                         <TableHead className="text-right">เงินเดือน</TableHead>
                         <TableHead className="text-right">คอม</TableHead>
+                        <TableHead className="text-right">หักลาเกิน</TableHead>
                         <TableHead className="text-right">ปรับปรุง</TableHead>
                         <TableHead className="text-right">รวม</TableHead>
                         <TableHead>สถานะ</TableHead>
@@ -348,7 +359,7 @@ export default function Payroll() {
                     </TableHeader>
                     <TableBody>
                       {items.length === 0 ? (
-                        <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">ไม่มีข้อมูล</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">ไม่มีข้อมูล</TableCell></TableRow>
                       ) : items.map((it) => (
                         <TableRow key={it.id}>
                           <TableCell>
@@ -358,6 +369,18 @@ export default function Payroll() {
                           <TableCell className="text-sm">{it.homeBranch || "-"}</TableCell>
                           <TableCell className="text-right">{formatCurrency(it.salary)}</TableCell>
                           <TableCell className="text-right text-emerald-600">{formatCurrency(it.totalCommission)}</TableCell>
+                          <TableCell className="text-right">
+                            {it.leaveDeduction > 0 ? (
+                              <>
+                                <div className="text-red-600">−{formatCurrency(it.leaveDeduction)}</div>
+                                <div className="text-xs text-muted-foreground">เกิน {formatDays(it.leaveExcessDays)} วัน</div>
+                              </>
+                            ) : it.leaveDays > 0 ? (
+                              <span className="text-xs text-muted-foreground">ลา {formatDays(it.leaveDays)} วัน</span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">
                             {it.adjustment !== 0 ? (
                               <span className={it.adjustment < 0 ? "text-red-600" : "text-amber-600"}>
@@ -443,6 +466,7 @@ export default function Payroll() {
                           <TableHead>พนักงาน</TableHead>
                           <TableHead className="text-right">เงินเดือน</TableHead>
                           <TableHead className="text-right">คอม</TableHead>
+                          <TableHead className="text-right">หักลาเกิน</TableHead>
                           <TableHead className="text-right">รวม</TableHead>
                           <TableHead>สถานะ</TableHead>
                           <TableHead className="text-right">ใบแจ้ง</TableHead>
@@ -454,6 +478,9 @@ export default function Payroll() {
                             <TableCell className="font-medium">{it.employeeName}</TableCell>
                             <TableCell className="text-right">{formatCurrency(it.salary)}</TableCell>
                             <TableCell className="text-right text-emerald-600">{formatCurrency(it.totalCommission)}</TableCell>
+                            <TableCell className="text-right text-red-600">
+                              {it.leaveDeduction > 0 ? `−${formatCurrency(it.leaveDeduction)}` : <span className="text-gray-400">—</span>}
+                            </TableCell>
                             <TableCell className="text-right font-bold text-rose-600">{formatCurrency(it.totalAmount)}</TableCell>
                             <TableCell>
                               {it.status === "paid" ? (
