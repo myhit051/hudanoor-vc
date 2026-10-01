@@ -59,6 +59,8 @@ export function usePayrollMutations(period: string | null) {
   const invalidate = async () => {
     await qc.invalidateQueries({ queryKey: ['payroll', 'runs'] });
     if (period) await qc.invalidateQueries({ queryKey: ['payroll', 'period', period] });
+    // หน้าบันทึกการลา/จ่ายเงินเดือนใช้สถานะ "ต้องคำนวณใหม่" จากข้อมูลนี้
+    await qc.invalidateQueries({ queryKey: ['leaves'] });
   };
 
   const createRun = useMutation({

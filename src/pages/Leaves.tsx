@@ -13,9 +13,8 @@ import {
   CalendarOff, CalendarDays, CalendarRange, Check, Loader2, Trash2, AlertCircle, RefreshCw, Info, Lock, History,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
-import { addLeave, deleteLeave, getLeaves, setLeaveLump, setLeaveQuota } from "@/lib/vercel-payroll";
+import { addLeave, createOrRegeneratePayroll, deleteLeave, getLeaves, setLeaveLump, setLeaveQuota } from "@/lib/vercel-payroll";
 import { LEAVE_TYPE_LABEL, formatDays } from "@/lib/leave-utils";
-import { usePayrollByPeriod, usePayrollMutations } from "@/hooks/use-payroll";
 import { LeaveType } from "@/types/payroll";
 import { toast } from "@/hooks/use-toast";
 
@@ -148,8 +147,8 @@ export function Leaves() {
   const year = selectedPeriod.slice(0, 4);
   const selectedMonthIdx = Number(selectedPeriod.slice(5, 7)) - 1;
 
-  const { run, items: payrollItems } = usePayrollByPeriod(selectedPeriod);
-  const { createRun } = usePayrollMutations(selectedPeriod);
+  const runs = useMemo(() => data?.runs ?? [], [data]);
+  const run = runs.find((r) => r.period === selectedPeriod);
 
   // ── ฟอร์มบันทึกการลา ──
   const [mode, setMode] = useState<"dated" | "lump">("dated");
@@ -176,6 +175,23 @@ export function Leaves() {
   const existingLump = mode === "lump" && lumpPeriod === selectedPeriod
     ? leaves.find((l) => l.isLump && l.employeeId === employeeId)
     : undefined;
+  // อีกแบบที่มีอยู่แล้วในเดือนเดียวกัน → นับรวมกัน (อาจซ้ำ) เตือนก่อนบันทึก
+  const datedInLumpMonth = mode === "lump" && lumpPeriod === selectedPeriod
+    ? leaves.filter((l) => !l.isLump && l.employeeId === employeeId).reduce((s, l) => s + l.days, 0)
+    : 0;
+  const lumpInDatedMonth = mode === "dated" && startDate.startsWith(selectedPeriod)
+    ? leaves.find((l) => l.isLump && l.employeeId === employeeId)
+    : undefined;
+
+  // แก้การลาเดือน month → กระทบเดือนนั้นและเดือนหลัง ๆ ในปีเดียวกัน ถ้าบางเดือนปิดรอบแล้วจะไม่หัก/คืนย้อนหลัง → ถามก่อน
+  const confirmClosedMonths = (month: string) => {
+    const closed = runs.filter((r) => r.status === "finalized" && r.period >= month && r.period.slice(0, 4) === month.slice(0, 4));
+    if (closed.length === 0) return true;
+    return confirm(
+      `เงินเดือน ${closed.map((r) => monthLabel(r.period)).join(", ")} ปิดรอบแล้ว\n` +
+      `การแก้นี้จะไม่หักหรือคืนเงินย้อนหลังในเดือนที่ปิดรอบแล้ว (ถ้าต้องการ ให้เปิดรอบใหม่แล้วกด "คำนวณใหม่")\n\nบันทึกต่อไหม?`
+    );
+  };
 
   const invalidateLeaves = () => qc.invalidateQueries({ queryKey: ["leaves"] });
 
@@ -185,7 +201,7 @@ export function Leaves() {
       const emp = employees.find((e) => e.id === vars.employeeId);
       toast({
         title: "บันทึกการลาแล้ว",
-        description: `${emp?.name ?? ""} ${vars.halfDay ? "ครึ่งวัน" : `${result.created} วัน`}`,
+        description: `${emp?.name ?? ""} ${vars.halfDay ? "ครึ่งวัน" : `${result.created} วัน`}${result.notice ? ` · ⚠️ ${result.notice}` : ""}`,
       });
       setEndDate("");
       setNote("");
@@ -200,11 +216,11 @@ export function Leaves() {
 
   const lumpMutation = useMutation({
     mutationFn: setLeaveLump,
-    onSuccess: async (_r, vars) => {
+    onSuccess: async (result, vars) => {
       const emp = employees.find((e) => e.id === vars.employeeId);
       toast({
         title: vars.days > 0 ? "บันทึกยอดลาย้อนหลังแล้ว" : "ลบยอดลาย้อนหลังแล้ว",
-        description: `${emp?.name ?? ""} · ${monthLabel(vars.period)}${vars.days > 0 ? ` · ${formatDays(vars.days)} วัน` : ""}`,
+        description: `${emp?.name ?? ""} · ${monthLabel(vars.period)}${vars.days > 0 ? ` · ${formatDays(vars.days)} วัน` : ""}${result.notice ? ` · ⚠️ ${result.notice}` : ""}`,
       });
       setLumpDays("");
       setNote("");
@@ -255,6 +271,7 @@ export function Leaves() {
         toast({ title: "กรุณาใส่จำนวนวันลา", variant: "destructive" });
         return;
       }
+      if (!confirmClosedMonths(lumpPeriod)) return;
       lumpMutation.mutate({ employeeId, period: lumpPeriod, days, leaveType, note: note.trim() });
       return;
     }
@@ -262,6 +279,7 @@ export function Leaves() {
       toast({ title: "กรุณาเลือกวันที่ให้ถูกต้อง", variant: "destructive" });
       return;
     }
+    if (!confirmClosedMonths(startDate.slice(0, 7))) return;
     addMutation.mutate({
       employeeId,
       startDate,
@@ -276,6 +294,7 @@ export function Leaves() {
     const quota = allQuota.trim() === "" ? null : Number(allQuota);
     const text = quota === null ? "ยกเลิกวันลาที่ได้ (ไม่หัก)" : `ตั้งวันลาที่ได้ ${formatDays(quota)} วัน/ปี`;
     if (!confirm(`${text} ให้พนักงานทุกคน?`)) return;
+    if (!confirmClosedMonths(`${year}-01`)) return;
     quotaMutation.mutate({ target: { all: true }, quota });
   };
 
@@ -297,15 +316,21 @@ export function Leaves() {
   }), [employees]);
   const noQuotaCount = employees.filter((e) => e.leaveQuota === null).length;
 
-  // รอบเงินเดือนเดือนนี้คิดจากข้อมูลการลาชุดเก่า → ต้องกด "คำนวณใหม่"
-  const payrollStale = !!run && run.status === "draft" && employees.some((e) => {
-    const it = payrollItems.find((i) => i.employeeId === e.id);
-    return !!it && (
-      it.leaveBasis !== "year" ||
-      it.leaveDays !== e.leaveDays ||
-      it.leaveUsedBefore !== e.usedBefore ||
-      (it.leaveQuota ?? null) !== e.leaveQuota
-    );
+  // รอบเงินเดือนฉบับร่างในปีนี้ที่คิดจากข้อมูลการลาชุดเก่า (เช่น เพิ่งใส่ยอดย้อนหลังเดือนก่อน ๆ) → ต้องคำนวณใหม่
+  const staleDrafts = runs.filter((r) => r.stale && r.status === "draft");
+  const recalcMutation = useMutation({
+    mutationFn: async (periods: string[]) => {
+      for (const p of periods) await createOrRegeneratePayroll(p, { regenerate: true });
+    },
+    onSuccess: async (_r, periods) => {
+      toast({ title: "คำนวณเงินเดือนใหม่แล้ว", description: periods.map(monthLabel).join(", ") });
+      await qc.invalidateQueries({ queryKey: ["payroll"] });
+      await invalidateLeaves();
+    },
+    onError: async (err: any) => {
+      toast({ title: "คำนวณใหม่ไม่สำเร็จ", description: err.message || "", variant: "destructive" });
+      await invalidateLeaves();
+    },
   });
 
   const savingForm = addMutation.isPending || lumpMutation.isPending;
@@ -350,20 +375,22 @@ export function Leaves() {
           </span>
         </div>
       )}
-      {payrollStale && (
+      {staleDrafts.length > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>ข้อมูลการลาเปลี่ยนหลังคำนวณเงินเดือน{monthLabel(selectedPeriod)} — คำนวณใหม่เพื่อให้ยอดหักในหน้าจ่ายเงินเดือนตรง</span>
+            <span>
+              ข้อมูลการลาเปลี่ยนหลังคำนวณเงินเดือน <strong>{staleDrafts.map((r) => monthLabel(r.period)).join(", ")}</strong> — คำนวณใหม่เพื่อให้ยอดหักในหน้าจ่ายเงินเดือนตรง
+            </span>
           </div>
           <Button
             size="sm"
-            onClick={() => createRun.mutate({ period: selectedPeriod, regenerate: true })}
-            disabled={createRun.isPending}
+            onClick={() => recalcMutation.mutate(staleDrafts.map((r) => r.period))}
+            disabled={recalcMutation.isPending}
             className="shrink-0"
           >
-            {createRun.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-            คำนวณเงินเดือนใหม่
+            {recalcMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            คำนวณเงินเดือนใหม่{staleDrafts.length > 1 ? ` (${staleDrafts.length} เดือน)` : ""}
           </Button>
         </div>
       )}
@@ -439,6 +466,11 @@ export function Leaves() {
                     )}
                   </div>
                   {rangeInvalid && <p className="text-sm text-red-600">"ถึงวันที่" ต้องไม่ก่อนวันเริ่มลา</p>}
+                  {lumpInDatedMonth && (
+                    <p className="text-xs text-amber-700">
+                      ⚠️ เดือนนี้มียอดย้อนหลังทั้งเดือนอยู่แล้ว {formatDays(lumpInDatedMonth.days)} วัน — วันที่บันทึกนี้จะนับรวมเพิ่ม ถ้าเป็นวันลาเดียวกันให้แก้ยอดย้อนหลังแทน
+                    </p>
+                  )}
                 </>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
@@ -472,6 +504,11 @@ export function Leaves() {
                   {existingLump && (
                     <p className="col-span-2 text-xs text-amber-700">
                       เดือนนี้มียอดย้อนหลังอยู่แล้ว {formatDays(existingLump.days)} วัน — บันทึกใหม่จะแทนที่ (ใส่ 0 = ลบ)
+                    </p>
+                  )}
+                  {datedInLumpMonth > 0 && (
+                    <p className="col-span-2 text-xs text-amber-700">
+                      ⚠️ เดือนนี้มีวันลาแบบระบุวันที่อยู่แล้ว {formatDays(datedInLumpMonth)} วัน — ยอดย้อนหลังจะนับรวมเพิ่ม ใส่เฉพาะวันที่ยังไม่ได้บันทึก
                     </p>
                   )}
                 </div>
@@ -640,7 +677,7 @@ export function Leaves() {
                               employeeName={e.name}
                               value={e.leaveQuota}
                               saving={savingQuotaFor === e.id}
-                              onSave={(quota) => quotaMutation.mutate({ target: { employeeId: e.id }, quota })}
+                              onSave={(quota) => { if (confirmClosedMonths(`${year}-01`)) quotaMutation.mutate({ target: { employeeId: e.id }, quota }); }}
                             />
                           </TableCell>
                           <TableCell className="text-right whitespace-nowrap">
@@ -734,7 +771,7 @@ export function Leaves() {
                               aria-label={`ลบวันลา ${name} ${when}`}
                               disabled={deleteMutation.isPending}
                               onClick={() => {
-                                if (confirm(`ลบวันลา ${name} ${when}?`)) deleteMutation.mutate(l.id);
+                                if (confirm(`ลบวันลา ${name} ${when}?`) && confirmClosedMonths(l.date.slice(0, 7))) deleteMutation.mutate(l.id);
                               }}
                             >
                               <Trash2 className="h-4 w-4" />

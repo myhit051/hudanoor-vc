@@ -86,6 +86,13 @@ export interface EmployeeLeave {
   createdAt: string;
 }
 
+// รอบเงินเดือนในปีเดียวกัน — stale = ค่าการลาที่คิดไว้ไม่ตรงข้อมูลการลาปัจจุบัน (ต้องคำนวณใหม่)
+export interface LeaveRunStatus {
+  period: string;
+  status: PayrollRunStatus;
+  stale: boolean;
+}
+
 export interface LeaveSummaryEmployee {
   id: string;
   name: string;

@@ -71,7 +71,9 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - วันลาที่ได้ **ต่อปีปฏิทิน (ม.ค.–ธ.ค.)** `employees.leave_quota_yearly` (NULL = ยังไม่ตั้ง → **ไม่หัก**) · `leave_quota_days` (ต่อเดือน) เลิกใช้แล้ว ห้ามนำกลับมาโดยไม่ถาม
 - สูตร (`lib/leaves.js`): เกินเดือนนี้ = max(0, สะสมก่อนเดือนนี้ + เดือนนี้ − โควตา) − max(0, สะสมก่อนเดือนนี้ − โควตา) → หักเฉพาะส่วนที่เกินในเดือนนั้น ไม่หักซ้ำ · หัก = วันเกิน × เงินเดือน ÷ 25 · **หักจากคอมก่อน คอมไม่พอหักจากเงินเดือน** (บอสเลือก) ยอดรับไม่ติดลบ · ลาทุกประเภทนับรวม
 - `payroll_items.total_amount` = เงินเดือน + คอม − `leave_deduction` + ปรับปรุง · ค่าการลาเป็น snapshot ตอนสร้างรอบ/คำนวณใหม่ (`leave_basis` 'year'/'month', `leave_used_before`) · รอบที่ปิดแล้วไม่เปลี่ยน · แก้การลาเดือนก่อน ๆ กระทบยอดหักเดือนหลังทั้งหมด (ต้องคำนวณใหม่เดือนที่ยังเป็นร่าง)
-- API ใน `api/payroll.js` (Admin ทั้งหมด): `GET ?action=leaves&period=` (มี `months[12]` ทั้งปีต่อคน) · `POST {action:'add-leave'}` · `POST {action:'set-leave-lump'}` · `PUT {action:'set-leave-quota'}` · `DELETE ?action=delete-leave&id=`
+- เตือน "ต้องคำนวณใหม่": `GET ?action=leaves` คืน `runs` (รอบเงินเดือนทั้งปี + `stale`) จาก `leaveRunStatus()` — หน้าบันทึกการลาแสดงทุกเดือนร่างที่ stale + ปุ่มคำนวณใหม่ทั้งหมด · หน้าจ่ายเงินเดือนเตือนเดือนที่เปิดอยู่ · แก้การลา/โควตาที่กระทบเดือนที่ปิดรอบแล้วต้อง confirm ก่อน (ไม่หัก/คืนย้อนหลังอัตโนมัติ — บอสรับทราบ)
+- ยอดย้อนหลัง + วันที่ระบุในเดือนเดียวกัน **นับรวมกัน** → API คืน `notice` และฟอร์มเตือนก่อนบันทึก (ไม่บล็อก)
+- API ใน `api/payroll.js` (Admin ทั้งหมด): `GET ?action=leaves&period=` (มี `months[12]` ทั้งปีต่อคน + `runs`) · `POST {action:'add-leave'}` · `POST {action:'set-leave-lump'}` · `PUT {action:'set-leave-quota'}` · `DELETE ?action=delete-leave&id=`
 
 ## กติกาที่ตกลงกับบอสแล้ว (อย่าเปลี่ยนเองโดยไม่ถาม)
 - หน้าบันทึกยอดขาย:

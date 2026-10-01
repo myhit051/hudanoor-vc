@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +24,7 @@ import { usePayrollByPeriod, usePayrollMutations, usePayrollRuns } from "@/hooks
 import { PayslipDialog } from "@/components/payroll/PayslipDialog";
 import { PayrollItem } from "@/types/payroll";
 import {
-  ImportPreview, ImportResult, importLegacySales, previewLegacySalesImport,
+  ImportPreview, ImportResult, getLeaves, importLegacySales, previewLegacySalesImport,
   importLegacyExpenses, previewLegacyExpensesImport,
 } from "@/lib/vercel-payroll";
 import { toast } from "@/hooks/use-toast";
@@ -67,6 +68,17 @@ export default function Payroll() {
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+
+  // ข้อมูลการลาเปลี่ยนหลังคำนวณรอบนี้ (เช่น ใส่ยอดย้อนหลังเดือนก่อน ๆ) → เตือนให้คำนวณใหม่
+  const { data: leaveData } = useQuery({
+    queryKey: ["leaves", selectedPeriod],
+    queryFn: () => getLeaves(selectedPeriod),
+    enabled: !!run,
+    staleTime: 15 * 1000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  const leaveStale = !!leaveData?.runs.find((r) => r.period === selectedPeriod)?.stale;
 
   const isFinalized = run?.status === "finalized";
   const periodHasRun = !!run;
@@ -270,6 +282,25 @@ export default function Payroll() {
           </div>
         </CardContent>
       </Card>
+
+      {periodHasRun && leaveStale && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              {isFinalized
+                ? "ข้อมูลการลาเปลี่ยนหลังปิดรอบนี้ — ยอดหักลาเกินในรอบนี้ยังเป็นค่าเดิม (เปิดรอบใหม่แล้วกด \"คำนวณใหม่\" ถ้าต้องการให้ตรง)"
+                : "ข้อมูลการลาเปลี่ยนหลังคำนวณรอบนี้ — กด \"คำนวณใหม่\" ก่อนจ่าย เพื่อให้ยอดหักลาเกินตรง"}
+            </span>
+          </div>
+          {!isFinalized && (
+            <Button size="sm" onClick={() => handleCreate(true)} disabled={createRun.isPending} className="shrink-0">
+              {createRun.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              คำนวณใหม่
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">

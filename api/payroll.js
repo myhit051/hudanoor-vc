@@ -134,6 +134,32 @@ function computePayrollItem(emp, incomes, leaveMonthsByEmp, period) {
   };
 }
 
+// รอบเงินเดือนในปีนั้น + ค่าการลาที่ใช้คิดไว้ยังตรงกับข้อมูลการลาปัจจุบันไหม (stale = ต้องคำนวณใหม่)
+async function leaveRunStatus(db, year, employees, leaveMonthsByEmp) {
+  const [runResult, itemResult] = await Promise.all([
+    db.execute({ sql: `SELECT id, period, status FROM payroll_runs WHERE period LIKE ? ORDER BY period`, args: [`${year}-%`] }),
+    db.execute({
+      sql: `SELECT i.payroll_run_id, i.employee_id, i.leave_days, i.leave_quota, i.leave_basis, i.leave_used_before
+            FROM payroll_items i JOIN payroll_runs r ON r.id = i.payroll_run_id WHERE r.period LIKE ?`,
+      args: [`${year}-%`],
+    }),
+  ]);
+  const quotaByEmp = new Map(employees.map((e) => [e.id, e.leaveQuota]));
+  const staleRuns = new Set();
+  const runPeriod = new Map(runResult.rows.map((r) => [r.id, r.period]));
+  for (const it of itemResult.rows) {
+    if (!quotaByEmp.has(it.employee_id)) continue; // ลาออกแล้ว — ไม่อยู่ในการคำนวณใหม่อยู่ดี
+    const usage = usageForPeriod(leaveMonthsByEmp, it.employee_id, runPeriod.get(it.payroll_run_id));
+    if (
+      it.leave_basis !== 'year'
+      || (Number(it.leave_days) || 0) !== usage.days
+      || (Number(it.leave_used_before) || 0) !== usage.usedBefore
+      || normalizeQuota(it.leave_quota) !== quotaByEmp.get(it.employee_id)
+    ) staleRuns.add(it.payroll_run_id);
+  }
+  return runResult.rows.map((r) => ({ period: r.period, status: r.status, stale: staleRuns.has(r.id) }));
+}
+
 // Build a normalized Set of salesperson (recorded_by) names for a commission
 // row. Returns null when no specific salesperson is set → match ALL recorders.
 function salespersonMatcher(commission) {
@@ -261,7 +287,8 @@ export default async function handler(req, res) {
             deduction: leave.deduction,
           };
         });
-        return res.status(200).json({ period, year, employees, leaves: leaveResult.rows.map(rowToLeave) });
+        const runs = await leaveRunStatus(db, year, empResult.rows.map(rowToPayrollEmployee), leaveMonthsByEmp);
+        return res.status(200).json({ period, year, employees, runs, leaves: leaveResult.rows.map(rowToLeave) });
       }
 
       // Preview legacy sales import — show counts based on row position
@@ -576,7 +603,17 @@ export default async function handler(req, res) {
           args: [`leave_${stamp}_${i}_${Math.random().toString(36).slice(2, 8)}`, employeeId, empName,
             date, days, type, String(leaveNote || '').trim(), authUser?.name || '', now],
         })), 'write');
-        return res.status(200).json({ success: true, created: dates.length });
+        // มียอดย้อนหลังทั้งเดือนในเดือนเดียวกันอยู่แล้ว → นับรวมกัน (อาจซ้ำ) แจ้งให้รู้
+        const months = [...new Set(dates.map((d) => d.slice(0, 7)))];
+        const lumps = await db.execute({
+          sql: `SELECT date, days FROM employee_leaves WHERE employee_id = ? AND is_lump = 1
+                AND date IN (${months.map(() => '?').join(',')})`,
+          args: [employeeId, ...months.map((m) => `${m}-01`)],
+        });
+        const notice = lumps.rows.length > 0
+          ? `เดือนนี้มียอดย้อนหลังทั้งเดือนอยู่แล้ว ${lumps.rows.map((r) => `${Number(r.days)} วัน`).join(', ')} — นับรวมกับวันที่บันทึกนี้`
+          : '';
+        return res.status(200).json({ success: true, created: dates.length, notice });
       }
 
       // ยอดลาย้อนหลังทั้งเดือน (ไม่รู้วันที่) — 1 แถวต่อคนต่อเดือน ใส่ใหม่ = แทนที่ของเดิม · days 0 = ลบ
@@ -610,7 +647,18 @@ export default async function handler(req, res) {
           });
         }
         await db.batch(stmts, 'write');
-        return res.status(200).json({ success: true });
+        // มีวันลาแบบระบุวันที่ในเดือนนี้อยู่แล้ว → นับรวมกัน (อาจซ้ำ) แจ้งให้รู้
+        let notice = '';
+        if (days > 0) {
+          const dated = await db.execute({
+            sql: `SELECT COALESCE(SUM(days), 0) AS total FROM employee_leaves
+                  WHERE employee_id = ? AND is_lump = 0 AND date LIKE ?`,
+            args: [employeeId, `${lumpPeriod}-%`],
+          });
+          const total = Number(dated.rows[0]?.total) || 0;
+          if (total > 0) notice = `เดือนนี้มีวันลาแบบระบุวันที่อยู่แล้ว ${total} วัน — นับรวมกับยอดย้อนหลังนี้`;
+        }
+        return res.status(200).json({ success: true, notice });
       }
 
       const { period, regenerate, note } = req.body || {};

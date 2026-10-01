@@ -1,6 +1,6 @@
 import { authHeaders } from '@/lib/auth-api';
 import {
-  EmployeeLeave, LeaveSummaryEmployee, LeaveType, PayrollItem, PayrollItemStatus, PayrollPreviewItem, PayrollRun,
+  EmployeeLeave, LeaveRunStatus, LeaveSummaryEmployee, LeaveType, PayrollItem, PayrollItemStatus, PayrollPreviewItem, PayrollRun,
 } from '@/types/payroll';
 
 const API_BASE = typeof window !== 'undefined'
@@ -144,7 +144,7 @@ export async function deletePayrollRun(runId: string) {
 }
 
 // ─── การลา (Admin เท่านั้น) ───
-export async function getLeaves(period: string): Promise<{ year: string; employees: LeaveSummaryEmployee[]; leaves: EmployeeLeave[] }> {
+export async function getLeaves(period: string): Promise<{ year: string; employees: LeaveSummaryEmployee[]; runs: LeaveRunStatus[]; leaves: EmployeeLeave[] }> {
   const res = await fetch(`${API_BASE}/payroll?action=leaves&period=${encodeURIComponent(period)}`, {
     headers: { ...authHeaders() },
   });
@@ -152,6 +152,7 @@ export async function getLeaves(period: string): Promise<{ year: string; employe
   return {
     year: data?.year || period.slice(0, 4),
     employees: Array.isArray(data?.employees) ? data.employees : [],
+    runs: Array.isArray(data?.runs) ? data.runs : [],
     leaves: Array.isArray(data?.leaves) ? data.leaves : [],
   };
 }
@@ -163,7 +164,7 @@ export async function addLeave(input: {
   halfDay: boolean;
   leaveType: LeaveType;
   note?: string;
-}): Promise<{ created: number }> {
+}): Promise<{ created: number; notice?: string }> {
   const res = await fetch(`${API_BASE}/payroll`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -179,7 +180,7 @@ export async function setLeaveLump(input: {
   days: number;
   leaveType: LeaveType;
   note?: string;
-}) {
+}): Promise<{ notice?: string }> {
   const res = await fetch(`${API_BASE}/payroll`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
