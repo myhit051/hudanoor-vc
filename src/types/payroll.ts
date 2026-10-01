@@ -23,9 +23,11 @@ export interface PayrollItem {
   adjustment: number;                   // โบนัส/หักเพิ่ม (+/-)
   adjustmentNote: string;
   leaveDays: number;                    // วันลาในงวดนี้ (ตอนคำนวณล่าสุด)
-  leaveQuota: number | null;            // วันลาที่ได้ต่อเดือน — null = ยังไม่ตั้ง (ไม่หัก)
+  leaveQuota: number | null;            // วันลาที่ได้ (ต่อปี ถ้า leaveBasis = 'year') — null = ยังไม่ตั้ง (ไม่หัก)
   leaveExcessDays: number;
   leaveDeduction: number;               // หักลาเกิน (บวก) — หักจากคอมก่อน ไม่พอหักจากเงินเดือน
+  leaveBasis: 'month' | 'year';         // 'month' = รอบที่คำนวณก่อน 2 ต.ค. 2026 (โควตาต่อเดือน)
+  leaveUsedBefore: number;              // วันลาสะสมในปีนี้ก่อนเดือนนี้
   status: PayrollItemStatus;
   paidAt: string;
   paidBy: string;
@@ -64,6 +66,8 @@ export interface PayrollPreviewItem {
   leaveQuota: number | null;
   leaveExcessDays: number;
   leaveDeduction: number;
+  leaveBasis: 'month' | 'year';
+  leaveUsedBefore: number;
   status: PayrollItemStatus;
 }
 
@@ -76,6 +80,7 @@ export interface EmployeeLeave {
   date: string;                         // YYYY-MM-DD
   days: number;                         // 1 หรือ 0.5
   leaveType: LeaveType;
+  isLump: boolean;                      // ยอดย้อนหลังทั้งเดือน ไม่ระบุวันที่
   note: string;
   recordedBy: string;
   createdAt: string;
@@ -87,8 +92,11 @@ export interface LeaveSummaryEmployee {
   position: string;
   homeBranch: string;
   salary: number;
-  leaveQuota: number | null;
-  leaveDays: number;
+  leaveQuota: number | null;            // วันลาที่ได้ต่อปี
+  leaveDays: number;                    // เดือนที่เลือก
+  usedBefore: number;                   // สะสมในปีก่อนเดือนที่เลือก
+  months: number[];                     // วันลาแต่ละเดือนของปี (ม.ค.–ธ.ค.)
+  yearDays: number;
   excessDays: number;
   dailyRate: number;                    // เงินเดือน ÷ 25
   deduction: number;                    // ยังไม่จำกัดเพดานตามยอดคอม+เงินเดือน (หน้าจ่ายเงินเดือนจำกัดให้)

@@ -144,12 +144,13 @@ export async function deletePayrollRun(runId: string) {
 }
 
 // ─── การลา (Admin เท่านั้น) ───
-export async function getLeaves(period: string): Promise<{ employees: LeaveSummaryEmployee[]; leaves: EmployeeLeave[] }> {
+export async function getLeaves(period: string): Promise<{ year: string; employees: LeaveSummaryEmployee[]; leaves: EmployeeLeave[] }> {
   const res = await fetch(`${API_BASE}/payroll?action=leaves&period=${encodeURIComponent(period)}`, {
     headers: { ...authHeaders() },
   });
   const data = await handleJson(res);
   return {
+    year: data?.year || period.slice(0, 4),
     employees: Array.isArray(data?.employees) ? data.employees : [],
     leaves: Array.isArray(data?.leaves) ? data.leaves : [],
   };
@@ -167,6 +168,22 @@ export async function addLeave(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ action: 'add-leave', ...input }),
+  });
+  return handleJson(res);
+}
+
+// ยอดลาย้อนหลังทั้งเดือน (ไม่ระบุวันที่) — ใส่ใหม่แทนของเดิม · days 0 = ลบ
+export async function setLeaveLump(input: {
+  employeeId: string;
+  period: string;
+  days: number;
+  leaveType: LeaveType;
+  note?: string;
+}) {
+  const res = await fetch(`${API_BASE}/payroll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ action: 'set-leave-lump', ...input }),
   });
   return handleJson(res);
 }

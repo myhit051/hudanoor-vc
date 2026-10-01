@@ -14,6 +14,13 @@
 - หน้าใหม่ `/leaves` "บันทึกการลา" (Admin): ฟอร์มบันทึก (เต็มวัน/ครึ่งวัน, ช่วงวันที่), สรุปรายเดือนพร้อมตั้งวันลาที่ได้รายคน/ทุกคน, รายการลา + ลบ, แจ้งเตือน + ปุ่มคำนวณเงินเดือนใหม่เมื่อข้อมูลลาเปลี่ยนหลังคำนวณ
 - หน้าจ่ายเงินเดือน: การ์ด "หักลาเกินรวม", คอลัมน์ "หักลาเกิน" · ใบแจ้งเงินเดือน: ส่วน "การลา / รายการหัก" แยกหักจากคอม/เงินเดือน
 
+## Update 2 ต.ค. 2026 — โควตาต่อปี + ย้อนหลัง
+- วันลาที่ได้เปลี่ยนเป็น **ต่อปีปฏิทิน** (`employees.leave_quota_yearly`) · `leave_quota_days` เลิกใช้
+- หักเฉพาะส่วนที่ยอดสะสมทั้งปีเกินในเดือนนั้น: max(0, ก่อน + เดือนนี้ − โควตา) − max(0, ก่อน − โควตา)
+- `employee_leaves.is_lump` = ยอดย้อนหลังทั้งเดือนไม่ระบุวันที่ (`POST {action:'set-leave-lump'}`, 0 = ลบ)
+- `payroll_items.leave_basis` ('month' รอบเก่า / 'year') + `leave_used_before` · ใบแจ้งแสดงสะสมทั้งปี
+- หน้า `/leaves`: ตาราง "การลาทั้งปี" (คน × 12 เดือน, รวม, ได้/ปี แก้ได้, คงเหลือ) กดตัวเลขเปิดรายการเดือนนั้น · ฟอร์มโหมด "ยอดย้อนหลังทั้งเดือน"
+
 ## Impact
 - Affected specs: `employee-leaves` (ใหม่)
 - Affected code: `lib/turso.js`, `lib/leaves.js`, `api/payroll.js`, `src/types/payroll.ts`, `src/lib/{vercel-payroll,leave-utils}.ts`, `src/pages/{Leaves,Payroll}.tsx`, `src/components/payroll/PayslipDialog.tsx`, เมนู 3 จุด

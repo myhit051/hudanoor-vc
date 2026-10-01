@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  CalendarOff, CalendarDays, Check, Loader2, Trash2, AlertCircle, RefreshCw, Info, Lock,
+  CalendarOff, CalendarDays, CalendarRange, Check, Loader2, Trash2, AlertCircle, RefreshCw, Info, Lock, History,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
-import { addLeave, deleteLeave, getLeaves, setLeaveQuota } from "@/lib/vercel-payroll";
+import { addLeave, deleteLeave, getLeaves, setLeaveLump, setLeaveQuota } from "@/lib/vercel-payroll";
 import { LEAVE_TYPE_LABEL, formatDays } from "@/lib/leave-utils";
 import { usePayrollByPeriod, usePayrollMutations } from "@/hooks/use-payroll";
 import { LeaveType } from "@/types/payroll";
@@ -32,6 +32,9 @@ const monthLabel = (period: string) => {
   const d = new Date(Number(y), Number(m) - 1, 1);
   return d.toLocaleDateString("th-TH", { month: "long", year: "numeric" });
 };
+
+const MONTH_SHORT = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+const buddhistYear = (year: string) => Number(year) + 543;
 
 // เดือนหน้า (ลาล่วงหน้า) ย้อนไป 17 เดือน
 const generateMonthOptions = () => {
@@ -83,11 +86,11 @@ function QuotaInput({ employeeName, value, onSave, saving }: {
         type="number"
         inputMode="decimal"
         min={0}
-        max={31}
+        max={366}
         step={0.5}
         value={draft}
         placeholder="ไม่ตั้ง"
-        aria-label={`วันลาที่ได้ต่อเดือนของ ${employeeName}`}
+        aria-label={`วันลาที่ได้ต่อปีของ ${employeeName}`}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") commit(); }}
         className="h-9 w-20 text-right"
@@ -100,6 +103,27 @@ function QuotaInput({ employeeName, value, onSave, saving }: {
     </div>
   );
 }
+
+function SegmentedButtons<T extends string>({ value, onChange, options, label, cols }: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+  label: string;
+  cols: string;
+}) {
+  return (
+    <div className={cn("grid gap-2", cols)} role="group" aria-label={label}>
+      {options.map((o) => (
+        <Button key={o.value} type="button" variant={value === o.value ? "default" : "outline"}
+          onClick={() => onChange(o.value)} aria-pressed={value === o.value}>
+          {o.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+const LEAVE_TYPE_OPTIONS = (Object.keys(LEAVE_TYPE_LABEL) as LeaveType[]).map((t) => ({ value: t, label: LEAVE_TYPE_LABEL[t] }));
 
 export function Leaves() {
   const qc = useQueryClient();
@@ -121,15 +145,20 @@ export function Leaves() {
   });
   const employees = useMemo(() => data?.employees ?? [], [data]);
   const leaves = useMemo(() => data?.leaves ?? [], [data]);
+  const year = selectedPeriod.slice(0, 4);
+  const selectedMonthIdx = Number(selectedPeriod.slice(5, 7)) - 1;
 
   const { run, items: payrollItems } = usePayrollByPeriod(selectedPeriod);
   const { createRun } = usePayrollMutations(selectedPeriod);
 
   // ── ฟอร์มบันทึกการลา ──
+  const [mode, setMode] = useState<"dated" | "lump">("dated");
   const [employeeId, setEmployeeId] = useState("");
   const [halfDay, setHalfDay] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [lumpPeriod, setLumpPeriod] = useState(selectedPeriod);
+  const [lumpDays, setLumpDays] = useState("");
   const [leaveType, setLeaveType] = useState<LeaveType>("sick");
   const [note, setNote] = useState("");
 
@@ -137,10 +166,16 @@ export function Leaves() {
     const today = toLocalDateStr(new Date());
     setStartDate((prev) => (prev.startsWith(selectedPeriod) ? prev : today.startsWith(selectedPeriod) ? today : `${selectedPeriod}-01`));
     setEndDate((prev) => (prev.startsWith(selectedPeriod) ? prev : ""));
+    setLumpPeriod(selectedPeriod);
   }, [selectedPeriod]);
 
   const dayCount = halfDay ? (startDate ? 0.5 : 0) : countDays(startDate, endDate);
   const rangeInvalid = !halfDay && !!endDate && countDays(startDate, endDate) === 0;
+
+  // ยอดย้อนหลังที่มีอยู่แล้วของคน+เดือนที่เลือก (ใส่ใหม่จะแทนที่)
+  const existingLump = mode === "lump" && lumpPeriod === selectedPeriod
+    ? leaves.find((l) => l.isLump && l.employeeId === employeeId)
+    : undefined;
 
   const invalidateLeaves = () => qc.invalidateQueries({ queryKey: ["leaves"] });
 
@@ -163,10 +198,28 @@ export function Leaves() {
     },
   });
 
+  const lumpMutation = useMutation({
+    mutationFn: setLeaveLump,
+    onSuccess: async (_r, vars) => {
+      const emp = employees.find((e) => e.id === vars.employeeId);
+      toast({
+        title: vars.days > 0 ? "บันทึกยอดลาย้อนหลังแล้ว" : "ลบยอดลาย้อนหลังแล้ว",
+        description: `${emp?.name ?? ""} · ${monthLabel(vars.period)}${vars.days > 0 ? ` · ${formatDays(vars.days)} วัน` : ""}`,
+      });
+      setLumpDays("");
+      setNote("");
+      if (vars.period !== selectedPeriod) setSelectedPeriod(vars.period);
+      await invalidateLeaves();
+    },
+    onError: (err: any) => {
+      toast({ title: "บันทึกไม่สำเร็จ", description: err.message || "", variant: "destructive" });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: deleteLeave,
     onSuccess: async () => {
-      toast({ title: "ลบวันลาแล้ว" });
+      toast({ title: "ลบรายการลาแล้ว" });
       await invalidateLeaves();
     },
     onError: (err: any) => {
@@ -181,7 +234,7 @@ export function Leaves() {
     onMutate: ({ target }) => setSavingQuotaFor("all" in target ? "all" : target.employeeId),
     onSettled: () => setSavingQuotaFor(null),
     onSuccess: async (_r, { quota }) => {
-      toast({ title: quota === null ? "ยกเลิกวันลาที่ได้แล้ว (ไม่หัก)" : `ตั้งวันลาที่ได้ ${formatDays(quota)} วัน/เดือนแล้ว` });
+      toast({ title: quota === null ? "ยกเลิกวันลาที่ได้แล้ว (ไม่หัก)" : `ตั้งวันลาที่ได้ ${formatDays(quota)} วัน/ปีแล้ว` });
       await invalidateLeaves();
     },
     onError: (err: any) => {
@@ -194,6 +247,15 @@ export function Leaves() {
   const submitLeave = () => {
     if (!employeeId) {
       toast({ title: "กรุณาเลือกพนักงาน", variant: "destructive" });
+      return;
+    }
+    if (mode === "lump") {
+      const days = Number(lumpDays);
+      if (lumpDays.trim() === "" || !Number.isFinite(days) || days < 0) {
+        toast({ title: "กรุณาใส่จำนวนวันลา", variant: "destructive" });
+        return;
+      }
+      lumpMutation.mutate({ employeeId, period: lumpPeriod, days, leaveType, note: note.trim() });
       return;
     }
     if (!startDate || rangeInvalid) {
@@ -212,7 +274,7 @@ export function Leaves() {
 
   const applyAllQuota = () => {
     const quota = allQuota.trim() === "" ? null : Number(allQuota);
-    const text = quota === null ? "ยกเลิกวันลาที่ได้ (ไม่หัก)" : `ตั้งวันลาที่ได้ ${formatDays(quota)} วัน/เดือน`;
+    const text = quota === null ? "ยกเลิกวันลาที่ได้ (ไม่หัก)" : `ตั้งวันลาที่ได้ ${formatDays(quota)} วัน/ปี`;
     if (!confirm(`${text} ให้พนักงานทุกคน?`)) return;
     quotaMutation.mutate({ target: { all: true }, quota });
   };
@@ -220,6 +282,13 @@ export function Leaves() {
   const [filterEmployee, setFilterEmployee] = useState("all");
   const shownLeaves = filterEmployee === "all" ? leaves : leaves.filter((l) => l.employeeId === filterEmployee);
   const employeeName = (id: string, fallback: string) => employees.find((e) => e.id === id)?.name || fallback;
+
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const openMonth = (empId: string, monthIdx: number) => {
+    setSelectedPeriod(`${year}-${String(monthIdx + 1).padStart(2, "0")}`);
+    setFilterEmployee(empId);
+    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const totals = useMemo(() => ({
     leaveDays: employees.reduce((s, e) => s + e.leaveDays, 0),
@@ -231,8 +300,15 @@ export function Leaves() {
   // รอบเงินเดือนเดือนนี้คิดจากข้อมูลการลาชุดเก่า → ต้องกด "คำนวณใหม่"
   const payrollStale = !!run && run.status === "draft" && employees.some((e) => {
     const it = payrollItems.find((i) => i.employeeId === e.id);
-    return !!it && (it.leaveDays !== e.leaveDays || (it.leaveQuota ?? null) !== e.leaveQuota);
+    return !!it && (
+      it.leaveBasis !== "year" ||
+      it.leaveDays !== e.leaveDays ||
+      it.leaveUsedBefore !== e.usedBefore ||
+      (it.leaveQuota ?? null) !== e.leaveQuota
+    );
   });
+
+  const savingForm = addMutation.isPending || lumpMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -243,7 +319,7 @@ export function Leaves() {
             บันทึกการลา
           </h1>
           <p className="text-muted-foreground mt-1">
-            ลาเกินวันที่ได้ต่อเดือน หักวันละ เงินเดือน ÷ 25 — หักจากคอมก่อน คอมไม่พอหักจากเงินเดือน
+            ลาสะสมเกินวันที่ได้ต่อปี (ม.ค.–ธ.ค.) หักวันละ เงินเดือน ÷ 25 ในเดือนที่เกิน — หักจากคอมก่อน คอมไม่พอหักจากเงินเดือน
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -308,9 +384,21 @@ export function Leaves() {
               <CardTitle className="flex items-center gap-2 text-lg">
                 <CalendarOff className="h-5 w-5 text-rose-500" /> บันทึกวันลา
               </CardTitle>
-              <CardDescription>ลาหลายวันติดกัน ใส่ "ถึงวันที่" ได้เลย</CardDescription>
+              <CardDescription>
+                {mode === "dated"
+                  ? "ลาหลายวันติดกัน ใส่ \"ถึงวันที่\" ได้เลย"
+                  : "จำวันที่ไม่ได้ ใส่ยอดรวมของเดือนนั้นแทน — ใส่ใหม่จะแทนยอดเดิมของเดือนนั้น"}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <SegmentedButtons<"dated" | "lump">
+                label="วิธีบันทึก"
+                cols="grid-cols-2"
+                value={mode}
+                onChange={setMode}
+                options={[{ value: "dated", label: "ระบุวันที่" }, { value: "lump", label: "ยอดย้อนหลังทั้งเดือน" }]}
+              />
+
               <div className="space-y-1.5">
                 <Label htmlFor="leave-employee">พนักงาน</Label>
                 <Select value={employeeId} onValueChange={setEmployeeId}>
@@ -325,41 +413,73 @@ export function Leaves() {
                 </Select>
               </div>
 
-              <div className="space-y-1.5">
-                <Label>ลา</Label>
-                <div className="grid grid-cols-2 gap-2" role="group" aria-label="ลาเต็มวันหรือครึ่งวัน">
-                  <Button type="button" variant={!halfDay ? "default" : "outline"} onClick={() => setHalfDay(false)} aria-pressed={!halfDay}>
-                    เต็มวัน
-                  </Button>
-                  <Button type="button" variant={halfDay ? "default" : "outline"} onClick={() => setHalfDay(true)} aria-pressed={halfDay}>
-                    ครึ่งวัน
-                  </Button>
-                </div>
-              </div>
-
-              <div className={cn("grid gap-3", !halfDay && "grid-cols-2")}>
-                <div className="space-y-1.5">
-                  <Label htmlFor="leave-start">{halfDay ? "วันที่ลา" : "วันที่เริ่มลา"}</Label>
-                  <Input id="leave-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                </div>
-                {!halfDay && (
+              {mode === "dated" ? (
+                <>
                   <div className="space-y-1.5">
-                    <Label htmlFor="leave-end">ถึงวันที่ <span className="text-muted-foreground font-normal">(ถ้าหลายวัน)</span></Label>
-                    <Input id="leave-end" type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+                    <Label>ลา</Label>
+                    <SegmentedButtons
+                      label="ลาเต็มวันหรือครึ่งวัน"
+                      cols="grid-cols-2"
+                      value={halfDay ? "half" : "full"}
+                      onChange={(v) => setHalfDay(v === "half")}
+                      options={[{ value: "full", label: "เต็มวัน" }, { value: "half", label: "ครึ่งวัน" }]}
+                    />
                   </div>
-                )}
-              </div>
-              {rangeInvalid && <p className="text-sm text-red-600">"ถึงวันที่" ต้องไม่ก่อนวันเริ่มลา</p>}
+
+                  <div className={cn("grid gap-3", !halfDay && "grid-cols-2")}>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="leave-start">{halfDay ? "วันที่ลา" : "วันที่เริ่มลา"}</Label>
+                      <Input id="leave-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                    </div>
+                    {!halfDay && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="leave-end">ถึงวันที่ <span className="text-muted-foreground font-normal">(ถ้าหลายวัน)</span></Label>
+                        <Input id="leave-end" type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} />
+                      </div>
+                    )}
+                  </div>
+                  {rangeInvalid && <p className="text-sm text-red-600">"ถึงวันที่" ต้องไม่ก่อนวันเริ่มลา</p>}
+                </>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="lump-period">เดือน</Label>
+                    <Select value={lumpPeriod} onValueChange={setLumpPeriod}>
+                      <SelectTrigger id="lump-period">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {monthOptions.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="lump-days">ลาไปกี่วัน</Label>
+                    <Input
+                      id="lump-days"
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      max={31}
+                      step={0.5}
+                      value={lumpDays}
+                      placeholder={existingLump ? `เดิม ${formatDays(existingLump.days)}` : "เช่น 2"}
+                      onChange={(e) => setLumpDays(e.target.value)}
+                    />
+                  </div>
+                  {existingLump && (
+                    <p className="col-span-2 text-xs text-amber-700">
+                      เดือนนี้มียอดย้อนหลังอยู่แล้ว {formatDays(existingLump.days)} วัน — บันทึกใหม่จะแทนที่ (ใส่ 0 = ลบ)
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <Label>ประเภท</Label>
-                <div className="grid grid-cols-3 gap-2" role="group" aria-label="ประเภทการลา">
-                  {(Object.keys(LEAVE_TYPE_LABEL) as LeaveType[]).map((t) => (
-                    <Button key={t} type="button" variant={leaveType === t ? "default" : "outline"} onClick={() => setLeaveType(t)} aria-pressed={leaveType === t}>
-                      {LEAVE_TYPE_LABEL[t]}
-                    </Button>
-                  ))}
-                </div>
+                <SegmentedButtons<LeaveType> label="ประเภทการลา" cols="grid-cols-3" value={leaveType} onChange={setLeaveType} options={LEAVE_TYPE_OPTIONS} />
               </div>
 
               <div className="space-y-1.5">
@@ -370,64 +490,39 @@ export function Leaves() {
               <Button
                 className="w-full bg-gradient-to-r from-rose-500 to-pink-500"
                 onClick={submitLeave}
-                disabled={addMutation.isPending || rangeInvalid}
+                disabled={savingForm || (mode === "dated" && rangeInvalid)}
               >
-                {addMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CalendarOff className="h-4 w-4 mr-2" />}
-                บันทึกการลา{dayCount > 0 ? ` (${formatDays(dayCount)} วัน)` : ""}
+                {savingForm ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CalendarOff className="h-4 w-4 mr-2" />}
+                {mode === "dated"
+                  ? `บันทึกการลา${dayCount > 0 ? ` (${formatDays(dayCount)} วัน)` : ""}`
+                  : "บันทึกยอดย้อนหลัง"}
               </Button>
             </CardContent>
           </Card>
 
-          {/* Summary */}
+          {/* Monthly summary */}
           <Card className="xl:col-span-2 min-w-0">
             <CardHeader>
               <CardTitle className="text-lg">สรุปการลา {monthLabel(selectedPeriod)}</CardTitle>
               <CardDescription>
-                ลารวม {formatDays(totals.leaveDays)} วัน · ลาเกิน {totals.overCount} คน · หักรวมประมาณ {formatCurrency(totals.deduction)}
+                ลาเดือนนี้รวม {formatDays(totals.leaveDays)} วัน · ลาเกิน {totals.overCount} คน · หักรวมประมาณ {formatCurrency(totals.deduction)}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex flex-wrap items-end gap-2 rounded-lg border bg-muted/40 p-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="all-quota" className="text-sm">วันลาที่ได้ต่อเดือน — ตั้งให้ทุกคน</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="all-quota"
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      max={31}
-                      step={0.5}
-                      value={allQuota}
-                      onChange={(e) => setAllQuota(e.target.value)}
-                      placeholder="เช่น 4"
-                      className="h-9 w-24 text-right"
-                    />
-                    <span className="text-sm text-muted-foreground">วัน</span>
-                  </div>
-                </div>
-                <Button size="sm" variant="outline" className="h-9" onClick={applyAllQuota} disabled={quotaMutation.isPending || employees.length === 0}>
-                  {savingQuotaFor === "all" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  ใช้กับทุกคน
-                </Button>
-                <span className="text-xs text-muted-foreground basis-full">แก้รายคนได้ในตารางด้านล่าง · เว้นว่าง = ยังไม่ตั้ง (ไม่หัก)</span>
-              </div>
-
               {noQuotaCount > 0 && (
                 <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>ยังไม่ได้ตั้งวันลาที่ได้ {noQuotaCount} คน — คนที่ยังไม่ตั้งจะไม่ถูกหัก</span>
+                  <span>ยังไม่ได้ตั้งวันลาที่ได้ต่อปี {noQuotaCount} คน — คนที่ยังไม่ตั้งจะไม่ถูกหัก (ตั้งได้ในตาราง "การลาทั้งปี" ด้านล่าง)</span>
                 </div>
               )}
-
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>พนักงาน</TableHead>
-                      <TableHead className="text-right">ลาได้/เดือน</TableHead>
-                      <TableHead className="text-right">ลาไป</TableHead>
-                      <TableHead className="text-right">เกิน</TableHead>
+                      <TableHead className="text-right">ลาเดือนนี้</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">สะสมทั้งปี / ได้</TableHead>
+                      <TableHead className="text-right">เกินเดือนนี้</TableHead>
                       <TableHead className="text-right">หักวันละ</TableHead>
                       <TableHead className="text-right">ยอดหัก</TableHead>
                     </TableRow>
@@ -437,30 +532,129 @@ export function Leaves() {
                       <TableRow><TableCell colSpan={6} className="py-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
                     ) : employees.length === 0 ? (
                       <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">ไม่มีพนักงาน</TableCell></TableRow>
-                    ) : employees.map((e) => (
-                      <TableRow key={e.id} className={cn(e.excessDays > 0 && "bg-red-50/60")}>
-                        <TableCell>
-                          <div className="font-medium">{e.name}</div>
-                          <div className="text-xs text-muted-foreground">เงินเดือน {formatCurrency(e.salary)}</div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <QuotaInput
-                            employeeName={e.name}
-                            value={e.leaveQuota}
-                            saving={savingQuotaFor === e.id}
-                            onSave={(quota) => quotaMutation.mutate({ target: { employeeId: e.id }, quota })}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right">{e.leaveDays > 0 ? formatDays(e.leaveDays) : <span className="text-gray-400">0</span>}</TableCell>
-                        <TableCell className="text-right">
-                          {e.excessDays > 0 ? <span className="font-semibold text-red-600">{formatDays(e.excessDays)}</span> : <span className="text-gray-400">—</span>}
-                        </TableCell>
-                        <TableCell className="text-right text-sm text-muted-foreground">{formatCurrency(e.dailyRate)}</TableCell>
-                        <TableCell className="text-right">
-                          {e.deduction > 0 ? <span className="font-semibold text-red-600">−{formatCurrency(e.deduction)}</span> : <span className="text-gray-400">—</span>}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    ) : employees.map((e) => {
+                      const cumulative = e.usedBefore + e.leaveDays;
+                      const over = e.leaveQuota !== null && cumulative > e.leaveQuota;
+                      return (
+                        <TableRow key={e.id} className={cn(e.excessDays > 0 && "bg-red-50/60")}>
+                          <TableCell>
+                            <div className="font-medium">{e.name}</div>
+                            <div className="text-xs text-muted-foreground">เงินเดือน {formatCurrency(e.salary)}</div>
+                          </TableCell>
+                          <TableCell className="text-right">{e.leaveDays > 0 ? formatDays(e.leaveDays) : <span className="text-gray-400">0</span>}</TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            <span className={cn(over && "font-semibold text-red-600")}>{formatDays(cumulative)}</span>
+                            <span className="text-muted-foreground"> / {e.leaveQuota === null ? "ไม่ตั้ง" : formatDays(e.leaveQuota)}</span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {e.excessDays > 0 ? <span className="font-semibold text-red-600">{formatDays(e.excessDays)}</span> : <span className="text-gray-400">—</span>}
+                          </TableCell>
+                          <TableCell className="text-right text-sm text-muted-foreground">{formatCurrency(e.dailyRate)}</TableCell>
+                          <TableCell className="text-right">
+                            {e.deduction > 0 ? <span className="font-semibold text-red-600">−{formatCurrency(e.deduction)}</span> : <span className="text-gray-400">—</span>}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Yearly overview */}
+          <Card className="xl:col-span-3 min-w-0">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <CalendarRange className="h-5 w-5 text-rose-500" /> การลาทั้งปี {buddhistYear(year)}
+              </CardTitle>
+              <CardDescription>จำนวนวันลารายคนรายเดือน · กดตัวเลขเพื่อดูรายการของเดือนนั้น</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-end gap-2 rounded-lg border bg-muted/40 p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="all-quota" className="text-sm">วันลาที่ได้ต่อปี — ตั้งให้ทุกคน</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="all-quota"
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      max={366}
+                      step={0.5}
+                      value={allQuota}
+                      onChange={(e) => setAllQuota(e.target.value)}
+                      placeholder="เช่น 12"
+                      className="h-9 w-24 text-right"
+                    />
+                    <span className="text-sm text-muted-foreground">วัน/ปี</span>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" className="h-9" onClick={applyAllQuota} disabled={quotaMutation.isPending || employees.length === 0}>
+                  {savingQuotaFor === "all" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  ใช้กับทุกคน
+                </Button>
+                <span className="text-xs text-muted-foreground basis-full">แก้รายคนได้ในช่อง "ได้/ปี" · เว้นว่าง = ยังไม่ตั้ง (ไม่หัก) · นับใหม่ทุก 1 ม.ค.</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <Table className="text-sm">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="sticky left-0 z-10 bg-background min-w-[120px]">พนักงาน</TableHead>
+                      {MONTH_SHORT.map((m, i) => (
+                        <TableHead key={m} className={cn("text-center px-1.5 whitespace-nowrap", i === selectedMonthIdx && "bg-rose-50 text-rose-700")}>{m}</TableHead>
+                      ))}
+                      <TableHead className="text-right whitespace-nowrap">รวม</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">ได้/ปี</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">คงเหลือ</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {employees.length === 0 ? (
+                      <TableRow><TableCell colSpan={16} className="py-8 text-center text-muted-foreground">{isLoading ? "กำลังโหลด..." : "ไม่มีพนักงาน"}</TableCell></TableRow>
+                    ) : employees.map((e) => {
+                      const remaining = e.leaveQuota === null ? null : e.leaveQuota - e.yearDays;
+                      return (
+                        <TableRow key={e.id}>
+                          <TableCell className="sticky left-0 z-10 bg-background font-medium whitespace-nowrap">{e.name}</TableCell>
+                          {e.months.map((d, i) => (
+                            <TableCell key={i} className={cn("text-center px-1", i === selectedMonthIdx && "bg-rose-50/60")}>
+                              {d > 0 ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openMonth(e.id, i)}
+                                  className="min-h-0 min-w-0 rounded px-1.5 py-0.5 font-medium text-rose-700 underline-offset-2 hover:bg-rose-100 hover:underline"
+                                  aria-label={`ดูการลา ${e.name} ${MONTH_SHORT[i]} ${formatDays(d)} วัน`}
+                                >
+                                  {formatDays(d)}
+                                </button>
+                              ) : (
+                                <span className="text-gray-300">·</span>
+                              )}
+                            </TableCell>
+                          ))}
+                          <TableCell className="text-right font-semibold">{formatDays(e.yearDays)}</TableCell>
+                          <TableCell className="text-right">
+                            <QuotaInput
+                              employeeName={e.name}
+                              value={e.leaveQuota}
+                              saving={savingQuotaFor === e.id}
+                              onSave={(quota) => quotaMutation.mutate({ target: { employeeId: e.id }, quota })}
+                            />
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            {remaining === null ? (
+                              <span className="text-gray-400">—</span>
+                            ) : remaining >= 0 ? (
+                              <span className="text-emerald-700">เหลือ {formatDays(remaining)}</span>
+                            ) : (
+                              <span className="font-semibold text-red-600">เกิน {formatDays(-remaining)}</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -468,7 +662,7 @@ export function Leaves() {
           </Card>
 
           {/* Leave list */}
-          <Card className="xl:col-span-3 min-w-0">
+          <Card ref={listRef} className="xl:col-span-3 min-w-0 scroll-mt-4">
             <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -509,36 +703,46 @@ export function Leaves() {
                           {isLoading ? "กำลังโหลด..." : "ยังไม่มีการลาในเดือนนี้"}
                         </TableCell>
                       </TableRow>
-                    ) : shownLeaves.map((l) => (
-                      <TableRow key={l.id}>
-                        <TableCell className="whitespace-nowrap">{leaveDateLabel(l.date)}</TableCell>
-                        <TableCell className="font-medium">{employeeName(l.employeeId, l.employeeName)}</TableCell>
-                        <TableCell className="whitespace-nowrap">{l.days === 0.5 ? "ครึ่งวัน" : "เต็มวัน"}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn("font-medium whitespace-nowrap", TYPE_BADGE[l.leaveType] ?? TYPE_BADGE.other)}>
-                            {LEAVE_TYPE_LABEL[l.leaveType] ?? LEAVE_TYPE_LABEL.other}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-[240px]">{l.note || "—"}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{l.recordedBy || "—"}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-red-600 hover:text-red-700"
-                            aria-label={`ลบวันลา ${employeeName(l.employeeId, l.employeeName)} ${leaveDateLabel(l.date)}`}
-                            disabled={deleteMutation.isPending}
-                            onClick={() => {
-                              if (confirm(`ลบวันลา ${employeeName(l.employeeId, l.employeeName)} วันที่ ${leaveDateLabel(l.date)}?`)) {
-                                deleteMutation.mutate(l.id);
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    ) : shownLeaves.map((l) => {
+                      const name = employeeName(l.employeeId, l.employeeName);
+                      const when = l.isLump ? `ยอดย้อนหลัง ${monthLabel(l.date.slice(0, 7))}` : leaveDateLabel(l.date);
+                      return (
+                        <TableRow key={l.id} className={cn(l.isLump && "bg-violet-50/50")}>
+                          <TableCell className="whitespace-nowrap">
+                            {l.isLump ? (
+                              <span className="inline-flex items-center gap-1 text-violet-700">
+                                <History className="h-3.5 w-3.5" /> ทั้งเดือน (ไม่ระบุวันที่)
+                              </span>
+                            ) : leaveDateLabel(l.date)}
+                          </TableCell>
+                          <TableCell className="font-medium">{name}</TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {l.isLump ? `${formatDays(l.days)} วัน` : l.days === 0.5 ? "ครึ่งวัน" : "เต็มวัน"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn("font-medium whitespace-nowrap", TYPE_BADGE[l.leaveType] ?? TYPE_BADGE.other)}>
+                              {LEAVE_TYPE_LABEL[l.leaveType] ?? LEAVE_TYPE_LABEL.other}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground max-w-[240px]">{l.note || "—"}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{l.recordedBy || "—"}</TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-600 hover:text-red-700"
+                              aria-label={`ลบวันลา ${name} ${when}`}
+                              disabled={deleteMutation.isPending}
+                              onClick={() => {
+                                if (confirm(`ลบวันลา ${name} ${when}?`)) deleteMutation.mutate(l.id);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>

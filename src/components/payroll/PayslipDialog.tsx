@@ -203,8 +203,9 @@ export function PayslipDialog({ open, onOpenChange, item, run, shopName = "HUDAN
                   <tr>
                     <td className="p-2 border" colSpan={2}>
                       ลาเดือนนี้ {formatDays(item.leaveDays)} วัน
+                      {item.leaveBasis === "year" && ` · สะสมทั้งปี ${formatDays(item.leaveUsedBefore + item.leaveDays)} วัน`}
                       {item.leaveQuota !== null
-                        ? ` · ลาได้ ${formatDays(item.leaveQuota)} วัน/เดือน`
+                        ? ` · ลาได้ ${formatDays(item.leaveQuota)} วัน/${item.leaveBasis === "year" ? "ปี" : "เดือน"}`
                         : " · ยังไม่ได้ตั้งวันลาที่ได้ (ไม่หัก)"}
                     </td>
                   </tr>
