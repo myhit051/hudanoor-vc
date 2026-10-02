@@ -30,7 +30,7 @@ console.log(await call('POST', { body: [{ date: '2026-09-17', channel: 'online',
 - เคสที่ควรเช็คเสมอเมื่อแตะ `api/sales.js`: ไม่ล็อกอิน→401, เลขออเดอร์ไม่ซ้ำหลังลบ+บันทึกพร้อมกัน, ค่าส่งนับครั้งเดียว, COD เฉพาะออนไลน์, ผู้บันทึก (admin/staff)
 
 ## 2) ทดสอบหน้าเว็บด้วย Playwright + API ปลอม
-- Playwright MCP ใช้ไม่ได้ (root/sandbox) → ใช้ playwright-core จาก npx cache:
+- Playwright MCP ใช้ไม่ได้ (root/sandbox) → ใช้ playwright-core จาก npx cache (ในไฟล์ `.mjs` โหลดด้วย `createRequire(import.meta.url)(path)` — `import()` ได้ chromium = undefined):
   `find / -path /proc -prune -o -type d -name playwright-core -print 2>/dev/null` (เคยอยู่ที่ `/root/.npm/_npx/*/node_modules/playwright-core`)
 - เบราว์เซอร์: `/opt/google/chrome/chrome` + `args: ['--no-sandbox']`
 - ขั้นตอน:
