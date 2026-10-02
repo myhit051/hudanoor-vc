@@ -7,6 +7,9 @@ import {
   calcLeaveDeduction, expandDates, isValidDate, loadLeaveDayDivisor, loadLeaveMonthsByEmployee, normalizeDivisor, normalizeQuota,
   rowToLeave, usageForPeriod,
 } from '../lib/leaves.js';
+import {
+  MAX_OT_DAY_RATE, calcOtAmount, loadOtDayRate, loadOtMonthsByEmployee, normalizeOtRate, otDaysForPeriod, rowToOvertime,
+} from '../lib/overtime.js';
 
 // Read all rows from a Google Sheet range (used for legacy import).
 // Use UNFORMATTED_VALUE so date cells come back as Excel serial numbers
@@ -95,6 +98,9 @@ function rowToItem(row) {
     leaveBasis: row.leave_basis === 'year' ? 'year' : 'month',
     leaveUsedBefore: Number(row.leave_used_before) || 0,
     leaveDayDivisor: Number(row.leave_day_divisor) || 25,
+    otDays: Number(row.ot_days) || 0,
+    otRate: row.ot_rate === null || row.ot_rate === undefined ? null : Number(row.ot_rate),
+    otAmount: Number(row.ot_amount) || 0,
     commissionForfeited: Number(row.commission_forfeited) || 0,
     commissionLeaveLimit: normalizeQuota(row.commission_leave_limit),
     status: row.status,
@@ -120,12 +126,25 @@ function rowToPayrollEmployee(row) {
   };
 }
 
-// เงินเดือน + คอม − หักลาเกิน (ยังไม่รวมช่อง "ปรับปรุง")
+// ข้อมูลการลา/OT ทั้งปีที่ใช้คิดเงินเดือน (ตัวหารรายวัน, ค่า OT ต่อวัน = ค่าตั้งทั้งร้าน)
+async function loadPayrollContext(db, year) {
+  const [leaveMonthsByEmp, divisor, otMonthsByEmp, otRate] = await Promise.all([
+    loadLeaveMonthsByEmployee(db, year),
+    loadLeaveDayDivisor(db),
+    loadOtMonthsByEmployee(db, year),
+    loadOtDayRate(db),
+  ]);
+  return { leaveMonthsByEmp, divisor, otMonthsByEmp, otRate };
+}
+
+// เงินเดือน + คอม − หักลาเกิน + ค่า OT (ยังไม่รวมช่อง "ปรับปรุง")
 // ลาเดือนนี้เกินเกณฑ์ → ตัดคอมทั้งเดือนก่อน แล้วค่อยหักลาเกินจากคอมที่เหลือ (ไม่พอหักจากเงินเดือน)
 // totalCommission ที่คืน = คอมที่ได้จริงหลังตัด · breakdown ยังเป็นคอมที่คิดได้ก่อนตัด
-function computePayrollItem(emp, incomes, leaveMonthsByEmp, period, divisor) {
+// ค่า OT บวกท้ายสุด ไม่ถูกใช้หักลาเกิน
+function computePayrollItem(emp, incomes, period, { leaveMonthsByEmp, divisor, otMonthsByEmp, otRate }) {
   const { breakdown, totalCommission: earnedCommission } = calcEmployeeCommission(emp, incomes);
   const usage = usageForPeriod(leaveMonthsByEmp, emp.id, period);
+  const ot = calcOtAmount(otDaysForPeriod(otMonthsByEmp, emp.id, period).days, otRate);
   const forfeit = calcCommissionForfeit({ commission: earnedCommission, limit: emp.commissionLeaveLimit, days: usage.days });
   const totalCommission = earnedCommission - forfeit.forfeited;
   const leave = calcLeaveDeduction({
@@ -141,17 +160,18 @@ function computePayrollItem(emp, incomes, leaveMonthsByEmp, period, divisor) {
     totalCommission,
     forfeit,
     leave,
-    baseAmount: emp.salary + totalCommission - leave.deduction,
+    ot,
+    baseAmount: emp.salary + totalCommission - leave.deduction + ot.amount,
   };
 }
 
-// รอบเงินเดือนในปีนั้น + ค่าการลาที่ใช้คิดไว้ยังตรงกับข้อมูลการลาปัจจุบันไหม (stale = ต้องคำนวณใหม่)
-async function leaveRunStatus(db, year, employees, leaveMonthsByEmp, divisor) {
+// รอบเงินเดือนในปีนั้น + ค่าการลา/OT ที่ใช้คิดไว้ยังตรงกับข้อมูลปัจจุบันไหม (stale = ต้องคำนวณใหม่)
+async function leaveRunStatus(db, year, employees, { leaveMonthsByEmp, divisor, otMonthsByEmp, otRate }) {
   const [runResult, itemResult] = await Promise.all([
     db.execute({ sql: `SELECT id, period, status FROM payroll_runs WHERE period LIKE ? ORDER BY period`, args: [`${year}-%`] }),
     db.execute({
       sql: `SELECT i.payroll_run_id, i.employee_id, i.leave_days, i.leave_quota, i.leave_basis, i.leave_used_before,
-              i.commission_leave_limit, i.leave_day_divisor
+              i.commission_leave_limit, i.leave_day_divisor, i.ot_days, i.ot_rate
             FROM payroll_items i JOIN payroll_runs r ON r.id = i.payroll_run_id WHERE r.period LIKE ?`,
       args: [`${year}-%`],
     }),
@@ -164,6 +184,8 @@ async function leaveRunStatus(db, year, employees, leaveMonthsByEmp, divisor) {
   for (const it of itemResult.rows) {
     if (!quotaByEmp.has(it.employee_id)) continue; // ลาออกแล้ว — ไม่อยู่ในการคำนวณใหม่อยู่ดี
     const usage = usageForPeriod(leaveMonthsByEmp, it.employee_id, runPeriod.get(it.payroll_run_id));
+    const otDays = otDaysForPeriod(otMonthsByEmp, it.employee_id, runPeriod.get(it.payroll_run_id)).days;
+    const isDraft = runStatus.get(it.payroll_run_id) === 'draft';
     if (
       it.leave_basis !== 'year'
       || (Number(it.leave_days) || 0) !== usage.days
@@ -171,7 +193,10 @@ async function leaveRunStatus(db, year, employees, leaveMonthsByEmp, divisor) {
       || normalizeQuota(it.leave_quota) !== quotaByEmp.get(it.employee_id)
       || normalizeQuota(it.commission_leave_limit) !== limitByEmp.get(it.employee_id)
       // ตัวหารรายวันเปลี่ยน — เตือนเฉพาะรอบร่าง (รอบที่ปิดแล้วจ่ายตามตัวหารเดิม ไม่ใช่ข้อมูลการลาเปลี่ยน)
-      || (runStatus.get(it.payroll_run_id) === 'draft' && (Number(it.leave_day_divisor) || 25) !== divisor)
+      || (isDraft && (Number(it.leave_day_divisor) || 25) !== divisor)
+      || (Number(it.ot_days) || 0) !== otDays
+      // ค่า OT ต่อวันเปลี่ยน — เหมือนตัวหาร เตือนเฉพาะรอบร่างที่มี OT
+      || (isDraft && otDays > 0 && Number(it.ot_rate) !== otRate)
     ) staleRuns.add(it.payroll_run_id);
   }
   return runResult.rows.map((r) => ({ period: r.period, status: r.status, stale: staleRuns.has(r.id) }));
@@ -271,15 +296,19 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'period is required (YYYY-MM)' });
         }
         const year = period.slice(0, 4);
-        const [empResult, leaveResult, leaveMonthsByEmp, divisor] = await Promise.all([
+        const [empResult, leaveResult, otResult, ctx] = await Promise.all([
           db.execute(`SELECT * FROM employees WHERE is_active = 1 ORDER BY name`),
           db.execute({
             sql: `SELECT * FROM employee_leaves WHERE date LIKE ? ORDER BY is_lump DESC, date DESC, created_at DESC`,
             args: [`${period}-%`],
           }),
-          loadLeaveMonthsByEmployee(db, year),
-          loadLeaveDayDivisor(db),
+          db.execute({
+            sql: `SELECT * FROM employee_overtime WHERE date LIKE ? ORDER BY is_lump DESC, date DESC, created_at DESC`,
+            args: [`${period}-%`],
+          }),
+          loadPayrollContext(db, year),
         ]);
+        const { leaveMonthsByEmp, divisor, otMonthsByEmp, otRate } = ctx;
         const employees = empResult.rows.map((row) => {
           const emp = rowToPayrollEmployee(row);
           const usage = usageForPeriod(leaveMonthsByEmp, emp.id, period);
@@ -291,6 +320,7 @@ export default async function handler(req, res) {
             divisor,
           });
           const idx = Number(period.slice(5, 7)) - 1;
+          const ot = otDaysForPeriod(otMonthsByEmp, emp.id, period);
           return {
             id: emp.id,
             name: emp.name,
@@ -310,11 +340,16 @@ export default async function handler(req, res) {
             excessDays: leave.excessDays,
             dailyRate: leave.dailyRate,
             deduction: leave.deduction,
+            otDays: ot.days,
+            otMonths: ot.months,
+            otYearDays: ot.months.reduce((s, d) => s + d, 0),
+            otAmount: calcOtAmount(ot.days, otRate).amount,
           };
         });
-        const runs = await leaveRunStatus(db, year, empResult.rows.map(rowToPayrollEmployee), leaveMonthsByEmp, divisor);
+        const runs = await leaveRunStatus(db, year, empResult.rows.map(rowToPayrollEmployee), ctx);
         return res.status(200).json({
-          period, year, employees, runs, rayaDaysPerYear: RAYA_DAYS_PER_YEAR, leaveDayDivisor: divisor, leaves: leaveResult.rows.map(rowToLeave),
+          period, year, employees, runs, rayaDaysPerYear: RAYA_DAYS_PER_YEAR, leaveDayDivisor: divisor, otDayRate: otRate,
+          leaves: leaveResult.rows.map(rowToLeave), overtime: otResult.rows.map(rowToOvertime),
         });
       }
 
@@ -438,10 +473,9 @@ export default async function handler(req, res) {
         const employees = empResult.rows.map(rowToPayrollEmployee);
 
         const incomes = await loadIncomesForPeriod(period);
-        const leaveMonthsByEmp = await loadLeaveMonthsByEmployee(db, period.slice(0, 4));
-        const divisor = await loadLeaveDayDivisor(db);
+        const ctx = await loadPayrollContext(db, period.slice(0, 4));
         const items = employees.map((emp) => {
-          const { breakdown, totalCommission, forfeit, leave, baseAmount } = computePayrollItem(emp, incomes, leaveMonthsByEmp, period, divisor);
+          const { breakdown, totalCommission, forfeit, leave, ot, baseAmount } = computePayrollItem(emp, incomes, period, ctx);
           return {
             employeeId: emp.id,
             employeeName: emp.name,
@@ -460,6 +494,9 @@ export default async function handler(req, res) {
             leaveDayDivisor: leave.divisor,
             commissionForfeited: forfeit.forfeited,
             commissionLeaveLimit: forfeit.limit,
+            otDays: ot.days,
+            otRate: ot.rate,
+            otAmount: ot.amount,
             status: 'pending',
           };
         });
@@ -703,6 +740,92 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, notice });
       }
 
+      // บันทึก OT: 1 วัน หรือช่วงวันที่ (1 แถวต่อวัน) · ครึ่งวันได้เฉพาะวันเดียว · วันเดียวกันรวมไม่เกิน 1 วัน
+      if (req.body?.action === 'add-ot') {
+        const { employeeId, startDate, endDate, halfDay, note: otNote } = req.body;
+        if (!employeeId) return res.status(400).json({ error: 'กรุณาเลือกพนักงาน' });
+        if (!isValidDate(startDate)) return res.status(400).json({ error: 'วันที่ไม่ถูกต้อง' });
+        const lastDate = halfDay || !endDate ? startDate : endDate;
+        if (!isValidDate(lastDate) || lastDate < startDate) {
+          return res.status(400).json({ error: 'ถึงวันที่ต้องไม่ก่อนวันเริ่ม' });
+        }
+        const dates = expandDates(startDate, lastDate);
+        if (!dates) return res.status(400).json({ error: 'บันทึกได้ครั้งละไม่เกิน 31 วัน' });
+        const days = halfDay ? 0.5 : 1;
+        const empResult = await db.execute({
+          sql: 'SELECT id, name FROM employees WHERE id = ? AND is_active = 1',
+          args: [employeeId],
+        });
+        if (empResult.rows.length === 0) return res.status(400).json({ error: 'ไม่พบพนักงานนี้' });
+        const existing = await db.execute({
+          sql: `SELECT date, SUM(days) AS total FROM employee_overtime
+                WHERE employee_id = ? AND is_lump = 0 AND date IN (${dates.map(() => '?').join(',')}) GROUP BY date`,
+          args: [employeeId, ...dates],
+        });
+        const clashes = existing.rows.filter((r) => (Number(r.total) || 0) + days > 1).map((r) => r.date);
+        if (clashes.length > 0) {
+          return res.status(409).json({ error: `วันที่ ${clashes.join(', ')} บันทึก OT ไว้แล้ว`, dates: clashes });
+        }
+        const now = new Date().toISOString();
+        const stamp = Date.now();
+        await db.batch(dates.map((date, i) => ({
+          sql: `INSERT INTO employee_overtime (id, employee_id, employee_name, date, days, note, recorded_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [`ot_${stamp}_${i}_${Math.random().toString(36).slice(2, 8)}`, employeeId, empResult.rows[0].name || '',
+            date, days, String(otNote || '').trim(), authUser?.name || '', now],
+        })), 'write');
+        const months = [...new Set(dates.map((d) => d.slice(0, 7)))];
+        const lumps = await db.execute({
+          sql: `SELECT days FROM employee_overtime WHERE employee_id = ? AND is_lump = 1
+                AND date IN (${months.map(() => '?').join(',')})`,
+          args: [employeeId, ...months.map((m) => `${m}-01`)],
+        });
+        const notice = lumps.rows.length > 0
+          ? `เดือนนี้มียอด OT ทั้งเดือนอยู่แล้ว ${lumps.rows.map((r) => `${Number(r.days)} วัน`).join(', ')} — นับรวมกับวันที่บันทึกนี้`
+          : '';
+        return res.status(200).json({ success: true, created: dates.length, notice });
+      }
+
+      // ยอด OT ทั้งเดือน (ไม่ระบุวันที่) — 1 แถวต่อคนต่อเดือน ใส่ใหม่ = แทนที่ของเดิม · days 0 = ลบ
+      if (req.body?.action === 'set-ot-lump') {
+        const { employeeId, period: lumpPeriod, note: lumpNote } = req.body;
+        const days = Number(req.body.days) || 0;
+        if (!employeeId) return res.status(400).json({ error: 'กรุณาเลือกพนักงาน' });
+        if (!lumpPeriod || !isValidDate(`${lumpPeriod}-01`)) return res.status(400).json({ error: 'เดือนไม่ถูกต้อง' });
+        if (days < 0 || days > 31 || days * 2 !== Math.round(days * 2)) {
+          return res.status(400).json({ error: 'จำนวนวันต้องเป็น 0–31 วัน (ทีละครึ่งวัน)' });
+        }
+        const empResult = await db.execute({
+          sql: 'SELECT id, name FROM employees WHERE id = ? AND is_active = 1',
+          args: [employeeId],
+        });
+        if (empResult.rows.length === 0) return res.status(400).json({ error: 'ไม่พบพนักงานนี้' });
+        const stmts = [{
+          sql: `DELETE FROM employee_overtime WHERE employee_id = ? AND is_lump = 1 AND date = ?`,
+          args: [employeeId, `${lumpPeriod}-01`],
+        }];
+        if (days > 0) {
+          stmts.push({
+            sql: `INSERT INTO employee_overtime (id, employee_id, employee_name, date, days, note, recorded_by, created_at, is_lump)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+            args: [`ot_lump_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, employeeId, empResult.rows[0].name || '',
+              `${lumpPeriod}-01`, days, String(lumpNote || '').trim(), authUser?.name || '', new Date().toISOString()],
+          });
+        }
+        await db.batch(stmts, 'write');
+        let notice = '';
+        if (days > 0) {
+          const dated = await db.execute({
+            sql: `SELECT COALESCE(SUM(days), 0) AS total FROM employee_overtime
+                  WHERE employee_id = ? AND is_lump = 0 AND date LIKE ?`,
+            args: [employeeId, `${lumpPeriod}-%`],
+          });
+          const total = Number(dated.rows[0]?.total) || 0;
+          if (total > 0) notice = `เดือนนี้มี OT แบบระบุวันที่อยู่แล้ว ${total} วัน — นับรวมกับยอดทั้งเดือนนี้`;
+        }
+        return res.status(200).json({ success: true, notice });
+      }
+
       const { period, regenerate, note } = req.body || {};
       if (!period || !/^\d{4}-\d{2}$/.test(period)) {
         return res.status(400).json({ error: 'period is required (YYYY-MM)' });
@@ -733,14 +856,13 @@ export default async function handler(req, res) {
       const employees = empResult.rows.map(rowToPayrollEmployee);
 
       const incomes = await loadIncomesForPeriod(period);
-      const leaveMonthsByEmp = await loadLeaveMonthsByEmployee(db, period.slice(0, 4));
-      const divisor = await loadLeaveDayDivisor(db);
+      const ctx = await loadPayrollContext(db, period.slice(0, 4));
       const now = new Date().toISOString();
       const runId = existing.rows.length > 0 ? existing.rows[0].id : `prun_${Date.now()}`;
 
       // Compute items
       const computed = employees.map((emp) => {
-        const { breakdown, totalCommission, forfeit, leave, baseAmount } = computePayrollItem(emp, incomes, leaveMonthsByEmp, period, divisor);
+        const { breakdown, totalCommission, forfeit, leave, ot, baseAmount } = computePayrollItem(emp, incomes, period, ctx);
         return {
           id: `pitem_${runId}_${emp.id}`,
           employee: emp,
@@ -748,6 +870,7 @@ export default async function handler(req, res) {
           breakdown,
           forfeit,
           leave,
+          ot,
           totalAmount: baseAmount,
         };
       });
@@ -784,14 +907,15 @@ export default async function handler(req, res) {
               salary, total_commission, total_amount, commission_breakdown,
               adjustment, adjustment_note, status, paid_at, paid_by, paid_method, note,
               leave_days, leave_quota, leave_excess_days, leave_deduction, leave_basis, leave_used_before,
-              commission_forfeited, commission_leave_limit, leave_day_divisor, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?, ?, ?, ?)`,
+              commission_forfeited, commission_leave_limit, leave_day_divisor, ot_days, ot_rate, ot_amount, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [
               c.id, runId, c.employee.id, c.employee.name, c.employee.position, c.employee.homeBranch,
               c.employee.salary, c.totalCommission, finalAmount, JSON.stringify(c.breakdown),
               adjustment, adjustmentNote, status, paidAt, paidBy, paidMethod, itemNote,
               c.leave.leaveDays, c.leave.quota, c.leave.excessDays, c.leave.deduction, c.leave.usedBefore,
-              c.forfeit.forfeited, c.forfeit.limit, c.leave.divisor, prev ? prev.created_at : now, now,
+              c.forfeit.forfeited, c.forfeit.limit, c.leave.divisor, c.ot.days, c.ot.rate, c.ot.amount,
+              prev ? prev.created_at : now, now,
             ],
           });
         }
@@ -819,13 +943,13 @@ export default async function handler(req, res) {
               id, payroll_run_id, employee_id, employee_name, position, home_branch,
               salary, total_commission, total_amount, commission_breakdown,
               leave_days, leave_quota, leave_excess_days, leave_deduction, leave_basis, leave_used_before,
-              commission_forfeited, commission_leave_limit, leave_day_divisor, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?, ?, ?, ?)`,
+              commission_forfeited, commission_leave_limit, leave_day_divisor, ot_days, ot_rate, ot_amount, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [
               c.id, runId, c.employee.id, c.employee.name, c.employee.position, c.employee.homeBranch,
               c.employee.salary, c.totalCommission, c.totalAmount, JSON.stringify(c.breakdown),
               c.leave.leaveDays, c.leave.quota, c.leave.excessDays, c.leave.deduction, c.leave.usedBefore,
-              c.forfeit.forfeited, c.forfeit.limit, c.leave.divisor, now, now,
+              c.forfeit.forfeited, c.forfeit.limit, c.leave.divisor, c.ot.days, c.ot.rate, c.ot.amount, now, now,
             ],
           });
         }
@@ -893,6 +1017,18 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, divisor });
       }
 
+      // ค่า OT ต่อวัน (ทั้งร้าน) — รอบที่ปิดแล้วไม่เปลี่ยน รอบร่างที่มี OT ขึ้นเตือนให้คำนวณใหม่
+      if (action === 'set-ot-rate') {
+        const rate = normalizeOtRate(req.body.rate);
+        if (rate === null) return res.status(400).json({ error: `ค่า OT ต้องเป็น 0–${MAX_OT_DAY_RATE} บาท` });
+        await db.execute({
+          sql: `INSERT INTO app_config (key, value, updated_at, updated_by) VALUES ('ot_day_rate', ?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+          args: [String(rate), now, authUser?.name || ''],
+        });
+        return res.status(200).json({ success: true, rate });
+      }
+
       // Finalize a run
       if (action === 'finalize' && runId) {
         await db.execute({
@@ -952,7 +1088,7 @@ export default async function handler(req, res) {
           args.push(adjustment, adjustmentNote);
           // Recompute total_amount
           const newTotal = (Number(current.salary) || 0) + (Number(current.total_commission) || 0)
-            - (Number(current.leave_deduction) || 0) + adjustment;
+            - (Number(current.leave_deduction) || 0) + (Number(current.ot_amount) || 0) + adjustment;
           sets.push('total_amount = ?');
           args.push(newTotal);
         }
@@ -1009,6 +1145,12 @@ export default async function handler(req, res) {
         if (!req.query.id) return res.status(400).json({ error: 'id is required' });
         const result = await db.execute({ sql: 'DELETE FROM employee_leaves WHERE id = ?', args: [req.query.id] });
         if (!Number(result.rowsAffected)) return res.status(404).json({ error: 'ไม่พบรายการลานี้' });
+        return res.status(200).json({ success: true });
+      }
+      if (req.query.action === 'delete-ot') {
+        if (!req.query.id) return res.status(400).json({ error: 'id is required' });
+        const result = await db.execute({ sql: 'DELETE FROM employee_overtime WHERE id = ?', args: [req.query.id] });
+        if (!Number(result.rowsAffected)) return res.status(404).json({ error: 'ไม่พบรายการ OT นี้' });
         return res.status(200).json({ success: true });
       }
 

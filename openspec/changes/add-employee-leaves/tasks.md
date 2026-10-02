@@ -28,6 +28,8 @@
 - [x] 2d.5 ตัวหารค่าแรงรายวัน ÷25 → ÷26 · snapshot `payroll_items.leave_day_divisor` · รอบร่างที่ตัวหารเก่าขึ้น stale
 - [x] 2d.6 ตั้งตัวหารในหน้า `/leaves` (ทั้งร้าน) — ตาราง `app_config` + action `set-leave-day-divisor`
 
+- [x] 2d.7 OT: `employee_overtime` + `lib/overtime.js` + ค่า OT ต่อวัน (`app_config.ot_day_rate`) + snapshot ใน payroll_items + หน้า/ใบแจ้ง
+
 ## 3. ตรวจสอบ
 - [x] 3.1 API กับ SQLite: สิทธิ์ 403, ตั้งวันลา, ช่วงวัน/ครึ่งวัน/ซ้ำ/ข้ามเดือน, หักจากคอม+เงินเดือน, เพดาน, ไม่ตั้ง=ไม่หัก, ปรับปรุง+คำนวณใหม่คงค่าเดิม
 - [x] 3.2 หน้าเว็บ (Playwright + handler จริง + SQLite): บันทึก/ลบ/ตั้งวันลา, หน้าจ่ายเงินเดือน, PDF ใบแจ้ง, ปุ่มคำนวณใหม่, มือถือ, พนักงานทั่วไปเข้าไม่ได้

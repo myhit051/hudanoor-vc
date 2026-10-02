@@ -59,7 +59,7 @@ const menuGroups = [
     label: "การเงิน",
     items: [
       { id: "payroll",          label: "จ่ายเงินเดือน",    icon: Wallet, adminOnly: true },
-      { id: "leaves",           label: "บันทึกการลา",     icon: CalendarOff, adminOnly: true },
+      { id: "leaves",           label: "การลา / OT",     icon: CalendarOff, adminOnly: true },
     ],
   },
   {

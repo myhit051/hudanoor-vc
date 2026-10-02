@@ -10,14 +10,17 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
-  CalendarOff, CalendarDays, CalendarRange, Check, Loader2, Trash2, AlertCircle, RefreshCw, Info, Lock, History,
+  CalendarOff, CalendarDays, CalendarRange, Check, Clock, Loader2, Trash2, AlertCircle, RefreshCw, Info, Lock, History,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import {
-  addLeave, createOrRegeneratePayroll, deleteLeave, getLeaves, setLeaveDayDivisor, setLeaveLump, setLeaveQuota,
+  addLeave, addOvertime, createOrRegeneratePayroll, deleteLeave, deleteOvertime, getLeaves, setLeaveDayDivisor, setLeaveLump,
+  setLeaveQuota, setOtDayRate, setOvertimeLump,
 } from "@/lib/vercel-payroll";
 import { LEAVE_TYPE_LABEL, formatDays } from "@/lib/leave-utils";
-import { LeaveType } from "@/types/payroll";
+import { EmployeeLeave, EmployeeOvertime, LeaveType } from "@/types/payroll";
+
+type ListRow = { kind: "leave"; item: EmployeeLeave } | { kind: "ot"; item: EmployeeOvertime };
 import { toast } from "@/hooks/use-toast";
 
 const toLocalDateStr = (d: Date) => {
@@ -148,13 +151,16 @@ export function Leaves() {
   });
   const employees = useMemo(() => data?.employees ?? [], [data]);
   const leaves = useMemo(() => data?.leaves ?? [], [data]);
+  const overtime = useMemo(() => data?.overtime ?? [], [data]);
   const year = selectedPeriod.slice(0, 4);
   const selectedMonthIdx = Number(selectedPeriod.slice(5, 7)) - 1;
 
   const runs = useMemo(() => data?.runs ?? [], [data]);
   const run = runs.find((r) => r.period === selectedPeriod);
 
-  // ── ฟอร์มบันทึกการลา ──
+  // ── ฟอร์มบันทึกการลา / OT ──
+  const [kind, setKind] = useState<"leave" | "ot">("leave");
+  const isOt = kind === "ot";
   const [mode, setMode] = useState<"dated" | "lump">("dated");
   const [employeeId, setEmployeeId] = useState("");
   const [halfDay, setHalfDay] = useState(false);
@@ -175,19 +181,23 @@ export function Leaves() {
   const dayCount = halfDay ? (startDate ? 0.5 : 0) : countDays(startDate, endDate);
   const rangeInvalid = !halfDay && !!endDate && countDays(startDate, endDate) === 0;
 
-  // หยุดรายอกับการลาอื่นแยกกลุ่มกัน (ยอดย้อนหลังได้กลุ่มละ 1 แถวต่อเดือน)
+  // หยุดรายอกับการลาอื่นแยกกลุ่มกัน (ยอดย้อนหลังได้กลุ่มละ 1 แถวต่อเดือน) · OT เป็นอีกกลุ่ม
   const sameGroup = (t: LeaveType) => (t === "raya") === (leaveType === "raya");
+  const groupRows: { isLump: boolean; employeeId: string; days: number }[] = isOt
+    ? overtime
+    : leaves.filter((l) => sameGroup(l.leaveType));
   // ยอดย้อนหลังที่มีอยู่แล้วของคน+เดือนที่เลือก (ใส่ใหม่จะแทนที่)
   const existingLump = mode === "lump" && lumpPeriod === selectedPeriod
-    ? leaves.find((l) => l.isLump && l.employeeId === employeeId && sameGroup(l.leaveType))
+    ? groupRows.find((l) => l.isLump && l.employeeId === employeeId)
     : undefined;
   // อีกแบบที่มีอยู่แล้วในเดือนเดียวกัน → นับรวมกัน (อาจซ้ำ) เตือนก่อนบันทึก
   const datedInLumpMonth = mode === "lump" && lumpPeriod === selectedPeriod
-    ? leaves.filter((l) => !l.isLump && l.employeeId === employeeId && sameGroup(l.leaveType)).reduce((s, l) => s + l.days, 0)
+    ? groupRows.filter((l) => !l.isLump && l.employeeId === employeeId).reduce((s, l) => s + l.days, 0)
     : 0;
   const lumpInDatedMonth = mode === "dated" && startDate.startsWith(selectedPeriod)
-    ? leaves.find((l) => l.isLump && l.employeeId === employeeId && sameGroup(l.leaveType))
+    ? groupRows.find((l) => l.isLump && l.employeeId === employeeId)
     : undefined;
+  const kindWord = isOt ? " OT" : "วันลา";
   const rayaPerYear = data?.rayaDaysPerYear ?? 3;
   const formEmployee = employees.find((e) => e.id === employeeId);
 
@@ -237,6 +247,54 @@ export function Leaves() {
     },
     onError: (err: any) => {
       toast({ title: "บันทึกไม่สำเร็จ", description: err.message || "", variant: "destructive" });
+    },
+  });
+
+  const otAddMutation = useMutation({
+    mutationFn: addOvertime,
+    onSuccess: async (result, vars) => {
+      const emp = employees.find((e) => e.id === vars.employeeId);
+      toast({
+        title: "บันทึก OT แล้ว",
+        description: `${emp?.name ?? ""} ${vars.halfDay ? "ครึ่งวัน" : `${result.created} วัน`}${result.notice ? ` · ⚠️ ${result.notice}` : ""}`,
+      });
+      setEndDate("");
+      setNote("");
+      const otPeriod = vars.startDate.slice(0, 7);
+      if (otPeriod !== selectedPeriod) setSelectedPeriod(otPeriod);
+      await invalidateLeaves();
+    },
+    onError: (err: any) => {
+      toast({ title: "บันทึก OT ไม่สำเร็จ", description: err.message || "", variant: "destructive" });
+    },
+  });
+
+  const otLumpMutation = useMutation({
+    mutationFn: setOvertimeLump,
+    onSuccess: async (result, vars) => {
+      const emp = employees.find((e) => e.id === vars.employeeId);
+      toast({
+        title: vars.days > 0 ? "บันทึกยอด OT ทั้งเดือนแล้ว" : "ลบยอด OT ทั้งเดือนแล้ว",
+        description: `${emp?.name ?? ""} · ${monthLabel(vars.period)}${vars.days > 0 ? ` · ${formatDays(vars.days)} วัน` : ""}${result.notice ? ` · ⚠️ ${result.notice}` : ""}`,
+      });
+      setLumpDays("");
+      setNote("");
+      if (vars.period !== selectedPeriod) setSelectedPeriod(vars.period);
+      await invalidateLeaves();
+    },
+    onError: (err: any) => {
+      toast({ title: "บันทึกไม่สำเร็จ", description: err.message || "", variant: "destructive" });
+    },
+  });
+
+  const otDeleteMutation = useMutation({
+    mutationFn: deleteOvertime,
+    onSuccess: async () => {
+      toast({ title: "ลบรายการ OT แล้ว" });
+      await invalidateLeaves();
+    },
+    onError: (err: any) => {
+      toast({ title: "ลบไม่สำเร็จ", description: err.message || "", variant: "destructive" });
     },
   });
 
@@ -302,6 +360,34 @@ export function Leaves() {
     divisorMutation.mutate(value);
   };
 
+  // ค่า OT ต่อวัน (ทั้งร้าน)
+  const otRate = data?.otDayRate ?? 100;
+  const [otRateDraft, setOtRateDraft] = useState("");
+  useEffect(() => { if (data) setOtRateDraft(String(data.otDayRate)); }, [data]);
+  const otRateMutation = useMutation({
+    mutationFn: setOtDayRate,
+    onSuccess: async (_r, value) => {
+      toast({ title: `ตั้งค่า OT วันละ ${formatCurrency(value)} แล้ว`, description: "เดือนที่ยังไม่ปิดรอบ กด \"คำนวณเงินเดือนใหม่\" เพื่อใช้ค่าใหม่" });
+      await invalidateLeaves();
+    },
+    onError: (err: any) => {
+      toast({ title: "ตั้งค่า OT ไม่สำเร็จ", description: err.message || "", variant: "destructive" });
+    },
+  });
+  const saveOtRate = () => {
+    const value = Number(otRateDraft);
+    if (otRateDraft.trim() === "" || !Number.isFinite(value) || value < 0 || value > 10000) {
+      toast({ title: "ค่า OT ต้องเป็น 0–10,000 บาท", variant: "destructive" });
+      return;
+    }
+    if (value === otRate) return;
+    if (!confirm(
+      `เปลี่ยนค่า OT เป็นวันละ ${formatCurrency(value)} (เดิม ${formatCurrency(otRate)})?\n` +
+      `เดือนที่ปิดรอบแล้วไม่เปลี่ยน · เดือนที่ยังไม่ปิดต้องกด "คำนวณใหม่"`
+    )) return;
+    otRateMutation.mutate(value);
+  };
+
   const submitLeave = () => {
     if (!employeeId) {
       toast({ title: "กรุณาเลือกพนักงาน", variant: "destructive" });
@@ -310,11 +396,12 @@ export function Leaves() {
     if (mode === "lump") {
       const days = Number(lumpDays);
       if (lumpDays.trim() === "" || !Number.isFinite(days) || days < 0) {
-        toast({ title: "กรุณาใส่จำนวนวันลา", variant: "destructive" });
+        toast({ title: `กรุณาใส่จำนวน${kindWord}`, variant: "destructive" });
         return;
       }
       if (!confirmClosedMonths(lumpPeriod)) return;
-      lumpMutation.mutate({ employeeId, period: lumpPeriod, days, leaveType, note: note.trim() });
+      if (isOt) otLumpMutation.mutate({ employeeId, period: lumpPeriod, days, note: note.trim() });
+      else lumpMutation.mutate({ employeeId, period: lumpPeriod, days, leaveType, note: note.trim() });
       return;
     }
     if (!startDate || rangeInvalid) {
@@ -322,6 +409,16 @@ export function Leaves() {
       return;
     }
     if (!confirmClosedMonths(startDate.slice(0, 7))) return;
+    if (isOt) {
+      otAddMutation.mutate({
+        employeeId,
+        startDate,
+        endDate: halfDay ? undefined : endDate || undefined,
+        halfDay,
+        note: note.trim(),
+      });
+      return;
+    }
     addMutation.mutate({
       employeeId,
       startDate,
@@ -349,7 +446,14 @@ export function Leaves() {
   };
 
   const [filterEmployee, setFilterEmployee] = useState("all");
-  const shownLeaves = filterEmployee === "all" ? leaves : leaves.filter((l) => l.employeeId === filterEmployee);
+  const shownRows = useMemo(() => {
+    const rows: ListRow[] = [
+      ...leaves.map((item) => ({ kind: "leave" as const, item })),
+      ...overtime.map((item) => ({ kind: "ot" as const, item })),
+    ].filter((r) => filterEmployee === "all" || r.item.employeeId === filterEmployee);
+    return rows.sort((a, b) => Number(b.item.isLump) - Number(a.item.isLump)
+      || b.item.date.localeCompare(a.item.date) || b.item.createdAt.localeCompare(a.item.createdAt));
+  }, [leaves, overtime, filterEmployee]);
   const employeeName = (id: string, fallback: string) => employees.find((e) => e.id === id)?.name || fallback;
 
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -364,6 +468,8 @@ export function Leaves() {
     deduction: employees.reduce((s, e) => s + e.deduction, 0),
     overCount: employees.filter((e) => e.excessDays > 0).length,
     forfeitCount: employees.filter((e) => e.commissionForfeit).length,
+    otDays: employees.reduce((s, e) => s + e.otDays, 0),
+    otAmount: employees.reduce((s, e) => s + e.otAmount, 0),
   }), [employees]);
   const noQuotaCount = employees.filter((e) => e.leaveQuota === null).length;
   const noLimitCount = employees.filter((e) => e.commissionLeaveLimit === null).length;
@@ -385,7 +491,7 @@ export function Leaves() {
     },
   });
 
-  const savingForm = addMutation.isPending || lumpMutation.isPending;
+  const savingForm = addMutation.isPending || lumpMutation.isPending || otAddMutation.isPending || otLumpMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -393,11 +499,12 @@ export function Leaves() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-600 to-pink-600 bg-clip-text text-transparent">
-            บันทึกการลา
+            บันทึกการลา / OT
           </h1>
           <p className="text-muted-foreground mt-1">
             ลาสะสมเกินวันที่ได้ต่อปี (ม.ค.–ธ.ค.) หักวันละ เงินเดือน ÷ {formatDays(divisor)} ในเดือนที่เกิน — หักจากคอมก่อน คอมไม่พอหักจากเงินเดือน
             · ลาในเดือนเกินเกณฑ์ = ไม่ได้คอมเดือนนั้น · หยุดรายอ {rayaPerYear} วัน/ปี ไม่นับเป็นวันลา
+            · OT วันละ {formatCurrency(otRate)} บวกเข้าเงินเดือน
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -433,7 +540,7 @@ export function Leaves() {
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
-              ข้อมูลการลาเปลี่ยนหลังคำนวณเงินเดือน <strong>{staleDrafts.map((r) => monthLabel(r.period)).join(", ")}</strong> — คำนวณใหม่เพื่อให้ยอดหักในหน้าจ่ายเงินเดือนตรง
+              ข้อมูลการลา/OT หรือค่าตั้งเปลี่ยนหลังคำนวณเงินเดือน <strong>{staleDrafts.map((r) => monthLabel(r.period)).join(", ")}</strong> — คำนวณใหม่เพื่อให้ยอดหักและค่า OT ในหน้าจ่ายเงินเดือนตรง
             </span>
           </div>
           <Button
@@ -462,21 +569,30 @@ export function Leaves() {
           <Card className="xl:col-span-1 h-fit min-w-0">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <CalendarOff className="h-5 w-5 text-rose-500" /> บันทึกวันลา
+                {isOt
+                  ? <><Clock className="h-5 w-5 text-blue-500" /> บันทึก OT</>
+                  : <><CalendarOff className="h-5 w-5 text-rose-500" /> บันทึกวันลา</>}
               </CardTitle>
               <CardDescription>
                 {mode === "dated"
-                  ? "ลาหลายวันติดกัน ใส่ \"ถึงวันที่\" ได้เลย"
+                  ? `${isOt ? "ทำ OT " : "ลา"}หลายวันติดกัน ใส่ "ถึงวันที่" ได้เลย`
                   : "จำวันที่ไม่ได้ ใส่ยอดรวมของเดือนนั้นแทน — ใส่ใหม่จะแทนยอดเดิมของเดือนนั้น"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <SegmentedButtons<"leave" | "ot">
+                label="บันทึกอะไร"
+                cols="grid-cols-2"
+                value={kind}
+                onChange={setKind}
+                options={[{ value: "leave", label: "การลา" }, { value: "ot", label: `OT (${formatCurrency(otRate)}/วัน)` }]}
+              />
               <SegmentedButtons<"dated" | "lump">
                 label="วิธีบันทึก"
                 cols="grid-cols-2"
                 value={mode}
                 onChange={setMode}
-                options={[{ value: "dated", label: "ระบุวันที่" }, { value: "lump", label: "ยอดย้อนหลังทั้งเดือน" }]}
+                options={[{ value: "dated", label: "ระบุวันที่" }, { value: "lump", label: isOt ? "ยอดรวมทั้งเดือน" : "ยอดย้อนหลังทั้งเดือน" }]}
               />
 
               <div className="space-y-1.5">
@@ -496,7 +612,7 @@ export function Leaves() {
               {mode === "dated" ? (
                 <>
                   <div className="space-y-1.5">
-                    <Label>ลา</Label>
+                    <Label>{isOt ? "OT" : "ลา"}</Label>
                     <SegmentedButtons
                       label="ลาเต็มวันหรือครึ่งวัน"
                       cols="grid-cols-2"
@@ -508,7 +624,7 @@ export function Leaves() {
 
                   <div className={cn("grid gap-3", !halfDay && "grid-cols-2")}>
                     <div className="space-y-1.5">
-                      <Label htmlFor="leave-start">{halfDay ? "วันที่ลา" : "วันที่เริ่มลา"}</Label>
+                      <Label htmlFor="leave-start">{halfDay ? (isOt ? "วันที่ทำ OT" : "วันที่ลา") : (isOt ? "วันที่เริ่ม" : "วันที่เริ่มลา")}</Label>
                       <Input id="leave-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                     </div>
                     {!halfDay && (
@@ -521,7 +637,7 @@ export function Leaves() {
                   {rangeInvalid && <p className="text-sm text-red-600">"ถึงวันที่" ต้องไม่ก่อนวันเริ่มลา</p>}
                   {lumpInDatedMonth && (
                     <p className="text-xs text-amber-700">
-                      ⚠️ เดือนนี้มียอดย้อนหลังทั้งเดือนอยู่แล้ว {formatDays(lumpInDatedMonth.days)} วัน — วันที่บันทึกนี้จะนับรวมเพิ่ม ถ้าเป็นวันลาเดียวกันให้แก้ยอดย้อนหลังแทน
+                      ⚠️ เดือนนี้มียอดย้อนหลังทั้งเดือนอยู่แล้ว {formatDays(lumpInDatedMonth.days)} วัน — วันที่บันทึกนี้จะนับรวมเพิ่ม ถ้าเป็น{isOt ? " OT " : "วันลา"}เดียวกันให้แก้ยอดทั้งเดือนแทน
                     </p>
                   )}
                 </>
@@ -541,7 +657,7 @@ export function Leaves() {
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="lump-days">ลาไปกี่วัน</Label>
+                    <Label htmlFor="lump-days">{isOt ? "OT กี่วัน" : "ลาไปกี่วัน"}</Label>
                     <Input
                       id="lump-days"
                       type="number"
@@ -561,13 +677,13 @@ export function Leaves() {
                   )}
                   {datedInLumpMonth > 0 && (
                     <p className="col-span-2 text-xs text-amber-700">
-                      ⚠️ เดือนนี้มีวันลาแบบระบุวันที่อยู่แล้ว {formatDays(datedInLumpMonth)} วัน — ยอดย้อนหลังจะนับรวมเพิ่ม ใส่เฉพาะวันที่ยังไม่ได้บันทึก
+                      ⚠️ เดือนนี้มี{isOt ? " OT " : "วันลา"}แบบระบุวันที่อยู่แล้ว {formatDays(datedInLumpMonth)} วัน — ยอดย้อนหลังจะนับรวมเพิ่ม ใส่เฉพาะวันที่ยังไม่ได้บันทึก
                     </p>
                   )}
                 </div>
               )}
 
-              <div className="space-y-1.5">
+              {!isOt && <div className="space-y-1.5">
                 <Label>ประเภท</Label>
                 <SegmentedButtons<LeaveType> label="ประเภทการลา" cols="grid-cols-2" value={leaveType} onChange={setLeaveType} options={LEAVE_TYPE_OPTIONS} />
                 {leaveType === "raya" && (
@@ -576,22 +692,22 @@ export function Leaves() {
                     {formEmployee && ` · ${formEmployee.name} ใช้ไปแล้ว ${formatDays(formEmployee.rayaYearDays)} วันในปี ${buddhistYear(year)}`}
                   </p>
                 )}
-              </div>
+              </div>}
 
               <div className="space-y-1.5">
                 <Label htmlFor="leave-note">หมายเหตุ</Label>
-                <Input id="leave-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น ไปหาหมอ / ธุระที่บ้าน" />
+                <Input id="leave-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder={isOt ? "เช่น อยู่ต่อจัดไลฟ์ / นับสต๊อก" : "เช่น ไปหาหมอ / ธุระที่บ้าน"} />
               </div>
 
               <Button
-                className="w-full bg-gradient-to-r from-rose-500 to-pink-500"
+                className={cn("w-full bg-gradient-to-r", isOt ? "from-blue-500 to-indigo-500" : "from-rose-500 to-pink-500")}
                 onClick={submitLeave}
                 disabled={savingForm || (mode === "dated" && rangeInvalid)}
               >
-                {savingForm ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <CalendarOff className="h-4 w-4 mr-2" />}
+                {savingForm ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : isOt ? <Clock className="h-4 w-4 mr-2" /> : <CalendarOff className="h-4 w-4 mr-2" />}
                 {mode === "dated"
-                  ? `บันทึกการลา${dayCount > 0 ? ` (${formatDays(dayCount)} วัน)` : ""}`
-                  : "บันทึกยอดย้อนหลัง"}
+                  ? `บันทึก${isOt ? " OT" : "การลา"}${dayCount > 0 ? ` (${formatDays(dayCount)} วัน)` : ""}`
+                  : isOt ? "บันทึกยอด OT ทั้งเดือน" : "บันทึกยอดย้อนหลัง"}
               </Button>
             </CardContent>
           </Card>
@@ -599,10 +715,11 @@ export function Leaves() {
           {/* Monthly summary */}
           <Card className="xl:col-span-2 min-w-0">
             <CardHeader>
-              <CardTitle className="text-lg">สรุปการลา {monthLabel(selectedPeriod)}</CardTitle>
+              <CardTitle className="text-lg">สรุปการลา / OT {monthLabel(selectedPeriod)}</CardTitle>
               <CardDescription>
                 ลาเดือนนี้รวม {formatDays(totals.leaveDays)} วัน · ลาเกิน {totals.overCount} คน · หักรวมประมาณ {formatCurrency(totals.deduction)}
                 {totals.forfeitCount > 0 && ` · ถูกตัดคอม ${totals.forfeitCount} คน`}
+                {totals.otDays > 0 && ` · OT รวม ${formatDays(totals.otDays)} วัน ${formatCurrency(totals.otAmount)}`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -629,13 +746,14 @@ export function Leaves() {
                       <TableHead className="text-right">หักวันละ</TableHead>
                       <TableHead className="text-right">ยอดหัก</TableHead>
                       <TableHead className="text-right whitespace-nowrap">คอมเดือนนี้</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">OT</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
-                      <TableRow><TableCell colSpan={7} className="py-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="py-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
                     ) : employees.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">ไม่มีพนักงาน</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={8} className="py-8 text-center text-muted-foreground">ไม่มีพนักงาน</TableCell></TableRow>
                     ) : employees.map((e) => {
                       const cumulative = e.usedBefore + e.leaveDays;
                       const over = e.leaveQuota !== null && cumulative > e.leaveQuota;
@@ -671,6 +789,14 @@ export function Leaves() {
                             ) : (
                               <span className="text-xs text-emerald-700">ได้คอม (ลาได้อีก {formatDays(e.commissionLeaveLimit - e.leaveDays)})</span>
                             )}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            {e.otDays > 0 ? (
+                              <>
+                                <div className="font-semibold text-blue-700">+{formatCurrency(e.otAmount)}</div>
+                                <div className="text-xs text-muted-foreground">{formatDays(e.otDays)} วัน</div>
+                              </>
+                            ) : <span className="text-gray-400">—</span>}
                           </TableCell>
                         </TableRow>
                       );
@@ -772,6 +898,39 @@ export function Leaves() {
                     ตอนนี้ ÷ {formatDays(divisor)} · เช่น ทำงาน 6 วัน/สัปดาห์ ≈ 26 วัน/เดือน · เดือนที่ปิดรอบแล้วใช้ตัวหารเดิม
                   </span>
                 </div>
+                <div className="basis-full flex flex-wrap items-end gap-2 border-t pt-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ot-rate" className="text-sm">ค่า OT — ทั้งร้าน</Label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">วันละ</span>
+                      <Input
+                        id="ot-rate"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        max={10000}
+                        value={otRateDraft}
+                        onChange={(e) => setOtRateDraft(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveOtRate(); }}
+                        className="h-9 w-24 text-right"
+                      />
+                      <span className="text-sm text-muted-foreground">บาท</span>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9"
+                    onClick={saveOtRate}
+                    disabled={otRateMutation.isPending || !data || Number(otRateDraft) === otRate}
+                  >
+                    {otRateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    บันทึกค่า OT
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    ตอนนี้วันละ {formatCurrency(otRate)} · ครึ่งวัน = ครึ่งราคา · เดือนที่ปิดรอบแล้วใช้ค่าเดิม
+                  </span>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -787,11 +946,12 @@ export function Leaves() {
                       <TableHead className="text-right whitespace-nowrap">คงเหลือ</TableHead>
                       <TableHead className="text-right whitespace-nowrap">รายอ</TableHead>
                       <TableHead className="text-right whitespace-nowrap">ตัดคอมถ้าลาเกิน</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">OT ทั้งปี</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {employees.length === 0 ? (
-                      <TableRow><TableCell colSpan={18} className="py-8 text-center text-muted-foreground">{isLoading ? "กำลังโหลด..." : "ไม่มีพนักงาน"}</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={19} className="py-8 text-center text-muted-foreground">{isLoading ? "กำลังโหลด..." : "ไม่มีพนักงาน"}</TableCell></TableRow>
                     ) : employees.map((e) => {
                       const remaining = e.leaveQuota === null ? null : e.leaveQuota - e.yearDays;
                       return (
@@ -851,6 +1011,9 @@ export function Leaves() {
                               onSave={(quota) => { if (confirmClosedMonths(`${year}-01`)) quotaMutation.mutate({ target: { employeeId: e.id }, quota, kind: "commission" }); }}
                             />
                           </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            {e.otYearDays > 0 ? <span className="font-medium text-blue-700">{formatDays(e.otYearDays)} วัน</span> : <span className="text-gray-400">—</span>}
+                          </TableCell>
                         </TableRow>
                       );
                     })}
@@ -865,9 +1028,9 @@ export function Leaves() {
             <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 space-y-0">
               <div>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <CalendarDays className="h-5 w-5 text-rose-500" /> รายการลา {monthLabel(selectedPeriod)}
+                  <CalendarDays className="h-5 w-5 text-rose-500" /> รายการลา / OT {monthLabel(selectedPeriod)}
                 </CardTitle>
-                <CardDescription>{shownLeaves.length} รายการ</CardDescription>
+                <CardDescription>{shownRows.length} รายการ</CardDescription>
               </div>
               <Select value={filterEmployee} onValueChange={setFilterEmployee}>
                 <SelectTrigger className="w-48" aria-label="กรองตามพนักงาน">
@@ -896,17 +1059,21 @@ export function Leaves() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {shownLeaves.length === 0 ? (
+                    {shownRows.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                          {isLoading ? "กำลังโหลด..." : "ยังไม่มีการลาในเดือนนี้"}
+                          {isLoading ? "กำลังโหลด..." : "ยังไม่มีการลาหรือ OT ในเดือนนี้"}
                         </TableCell>
                       </TableRow>
-                    ) : shownLeaves.map((l) => {
+                    ) : shownRows.map((row) => {
+                      const l = row.item;
+                      const isOtRow = row.kind === "ot";
                       const name = employeeName(l.employeeId, l.employeeName);
-                      const when = l.isLump ? `ยอดย้อนหลัง ${monthLabel(l.date.slice(0, 7))}` : leaveDateLabel(l.date);
+                      const what = isOtRow ? "OT" : "วันลา";
+                      const when = l.isLump ? `ยอดทั้งเดือน ${monthLabel(l.date.slice(0, 7))}` : leaveDateLabel(l.date);
+                      const deleting = isOtRow ? otDeleteMutation.isPending : deleteMutation.isPending;
                       return (
-                        <TableRow key={l.id} className={cn(l.isLump && "bg-violet-50/50")}>
+                        <TableRow key={`${row.kind}-${l.id}`} className={cn(l.isLump && "bg-violet-50/50")}>
                           <TableCell className="whitespace-nowrap">
                             {l.isLump ? (
                               <span className="inline-flex items-center gap-1 text-violet-700">
@@ -919,9 +1086,13 @@ export function Leaves() {
                             {l.isLump ? `${formatDays(l.days)} วัน` : l.days === 0.5 ? "ครึ่งวัน" : "เต็มวัน"}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={cn("font-medium whitespace-nowrap", TYPE_BADGE[l.leaveType] ?? TYPE_BADGE.other)}>
-                              {LEAVE_TYPE_LABEL[l.leaveType] ?? LEAVE_TYPE_LABEL.other}
-                            </Badge>
+                            {row.kind === "ot" ? (
+                              <Badge variant="outline" className="font-medium whitespace-nowrap bg-blue-50 text-blue-700 border-blue-200">OT</Badge>
+                            ) : (
+                              <Badge variant="outline" className={cn("font-medium whitespace-nowrap", TYPE_BADGE[row.item.leaveType] ?? TYPE_BADGE.other)}>
+                                {LEAVE_TYPE_LABEL[row.item.leaveType] ?? LEAVE_TYPE_LABEL.other}
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground max-w-[240px]">{l.note || "—"}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">{l.recordedBy || "—"}</TableCell>
@@ -930,10 +1101,12 @@ export function Leaves() {
                               size="sm"
                               variant="ghost"
                               className="text-red-600 hover:text-red-700"
-                              aria-label={`ลบวันลา ${name} ${when}`}
-                              disabled={deleteMutation.isPending}
+                              aria-label={`ลบ${what} ${name} ${when}`}
+                              disabled={deleting}
                               onClick={() => {
-                                if (confirm(`ลบวันลา ${name} ${when}?`) && confirmClosedMonths(l.date.slice(0, 7))) deleteMutation.mutate(l.id);
+                                if (!confirm(`ลบ${what} ${name} ${when}?`) || !confirmClosedMonths(l.date.slice(0, 7))) return;
+                                if (isOtRow) otDeleteMutation.mutate(l.id);
+                                else deleteMutation.mutate(l.id);
                               }}
                             >
                               <Trash2 className="h-4 w-4" />

@@ -1221,7 +1221,7 @@ export function EmployeeManagement() {
                       </div>
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground text-right">
-                      ยังไม่รวมหักลาเกินโควตาและยอดปรับปรุง — ยอดจ่ายจริงดูที่หน้าจ่ายเงินเดือน
+                      ยังไม่รวมหักลาเกินโควตา ค่า OT และยอดปรับปรุง — ยอดจ่ายจริงดูที่หน้าจ่ายเงินเดือน
                     </p>
                   </div>
                 </div>

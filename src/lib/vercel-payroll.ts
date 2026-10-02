@@ -1,6 +1,6 @@
 import { authHeaders } from '@/lib/auth-api';
 import {
-  EmployeeLeave, LeaveRunStatus, LeaveSummaryEmployee, LeaveType, PayrollItem, PayrollItemStatus, PayrollPreviewItem, PayrollRun,
+  EmployeeLeave, EmployeeOvertime, LeaveRunStatus, LeaveSummaryEmployee, LeaveType, PayrollItem, PayrollItemStatus, PayrollPreviewItem, PayrollRun,
 } from '@/types/payroll';
 
 const API_BASE = typeof window !== 'undefined'
@@ -146,7 +146,7 @@ export async function deletePayrollRun(runId: string) {
 // ─── การลา (Admin เท่านั้น) ───
 export async function getLeaves(period: string): Promise<{
   year: string; employees: LeaveSummaryEmployee[]; runs: LeaveRunStatus[]; rayaDaysPerYear: number; leaveDayDivisor: number;
-  leaves: EmployeeLeave[];
+  otDayRate: number; leaves: EmployeeLeave[]; overtime: EmployeeOvertime[];
 }> {
   const res = await fetch(`${API_BASE}/payroll?action=leaves&period=${encodeURIComponent(period)}`, {
     headers: { ...authHeaders() },
@@ -158,6 +158,8 @@ export async function getLeaves(period: string): Promise<{
     runs: Array.isArray(data?.runs) ? data.runs : [],
     rayaDaysPerYear: Number(data?.rayaDaysPerYear) || 3,
     leaveDayDivisor: Number(data?.leaveDayDivisor) || 26,
+    otDayRate: Number.isFinite(Number(data?.otDayRate)) ? Number(data.otDayRate) : 100,
+    overtime: Array.isArray(data?.overtime) ? data.overtime : [],
     leaves: Array.isArray(data?.leaves) ? data.leaves : [],
   };
 }
@@ -198,6 +200,50 @@ export async function deleteLeave(id: string) {
   const res = await fetch(`${API_BASE}/payroll?action=delete-leave&id=${encodeURIComponent(id)}`, {
     method: 'DELETE',
     headers: { ...authHeaders() },
+  });
+  return handleJson(res);
+}
+
+// ─── OT (Admin เท่านั้น) ───
+export async function addOvertime(input: {
+  employeeId: string;
+  startDate: string;
+  endDate?: string;
+  halfDay: boolean;
+  note?: string;
+}): Promise<{ created: number; notice?: string }> {
+  const res = await fetch(`${API_BASE}/payroll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ action: 'add-ot', ...input }),
+  });
+  return handleJson(res);
+}
+
+// ยอด OT ทั้งเดือน (ไม่ระบุวันที่) — ใส่ใหม่แทนของเดิม · days 0 = ลบ
+export async function setOvertimeLump(input: { employeeId: string; period: string; days: number; note?: string }): Promise<{ notice?: string }> {
+  const res = await fetch(`${API_BASE}/payroll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ action: 'set-ot-lump', ...input }),
+  });
+  return handleJson(res);
+}
+
+export async function deleteOvertime(id: string) {
+  const res = await fetch(`${API_BASE}/payroll?action=delete-ot&id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { ...authHeaders() },
+  });
+  return handleJson(res);
+}
+
+// ค่า OT ต่อวัน (ทั้งร้าน)
+export async function setOtDayRate(rate: number) {
+  const res = await fetch(`${API_BASE}/payroll`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ action: 'set-ot-rate', rate }),
   });
   return handleJson(res);
 }

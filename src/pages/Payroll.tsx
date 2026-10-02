@@ -88,10 +88,11 @@ export default function Payroll() {
     const totalCommission = items.reduce((s, it) => s + it.totalCommission, 0);
     const totalAdjustment = items.reduce((s, it) => s + (it.adjustment || 0), 0);
     const totalLeaveDeduction = items.reduce((s, it) => s + (it.leaveDeduction || 0), 0);
+    const totalOt = items.reduce((s, it) => s + (it.otAmount || 0), 0);
     const totalAmount = items.reduce((s, it) => s + it.totalAmount, 0);
     const paidCount = items.filter((it) => it.status === "paid").length;
     const paidAmount = items.filter((it) => it.status === "paid").reduce((s, it) => s + it.totalAmount, 0);
-    return { totalSalary, totalCommission, totalAdjustment, totalLeaveDeduction, totalAmount, paidCount, paidAmount };
+    return { totalSalary, totalCommission, totalAdjustment, totalLeaveDeduction, totalOt, totalAmount, paidCount, paidAmount };
   }, [items]);
 
   const branchGroups = useMemo(() => {
@@ -289,8 +290,8 @@ export default function Payroll() {
             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
               {isFinalized
-                ? "ข้อมูลการลาเปลี่ยนหลังปิดรอบนี้ — ยอดหักลาเกินในรอบนี้ยังเป็นค่าเดิม (เปิดรอบใหม่แล้วกด \"คำนวณใหม่\" ถ้าต้องการให้ตรง)"
-                : "ข้อมูลการลาเปลี่ยนหลังคำนวณรอบนี้ — กด \"คำนวณใหม่\" ก่อนจ่าย เพื่อให้ยอดหักลาเกินตรง"}
+                ? "ข้อมูลการลา/OT เปลี่ยนหลังปิดรอบนี้ — ยอดหักลาเกินและค่า OT ในรอบนี้ยังเป็นค่าเดิม (เปิดรอบใหม่แล้วกด \"คำนวณใหม่\" ถ้าต้องการให้ตรง)"
+                : "ข้อมูลการลา/OT หรือค่าตั้งเปลี่ยนหลังคำนวณรอบนี้ — กด \"คำนวณใหม่\" ก่อนจ่าย เพื่อให้ยอดหักลาเกินและค่า OT ตรง"}
             </span>
           </div>
           {!isFinalized && (
@@ -303,7 +304,7 @@ export default function Payroll() {
       )}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200">
           <CardContent className="p-4">
             <div className="text-sm text-blue-700">เงินเดือนรวม</div>
@@ -324,6 +325,12 @@ export default function Payroll() {
             </div>
           </CardContent>
         </Card>
+        <Card className="bg-gradient-to-br from-sky-50 to-indigo-50 border-sky-200">
+          <CardContent className="p-4">
+            <div className="text-sm text-sky-700">OT รวม</div>
+            <div className="text-xl font-bold text-sky-800">+{formatCurrency(totals.totalOt)}</div>
+          </CardContent>
+        </Card>
         <Card className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200">
           <CardContent className="p-4">
             <div className="text-sm text-amber-700">ปรับปรุงรวม</div>
@@ -332,7 +339,7 @@ export default function Payroll() {
             </div>
           </CardContent>
         </Card>
-        <Card className="col-span-2 lg:col-span-1 bg-gradient-to-br from-rose-50 to-pink-50 border-rose-200">
+        <Card className="bg-gradient-to-br from-rose-50 to-pink-50 border-rose-200">
           <CardContent className="p-4">
             <div className="text-sm text-rose-700">รวมต้องจ่าย</div>
             <div className="text-xl font-bold text-rose-800">{formatCurrency(totals.totalAmount)}</div>
@@ -382,6 +389,7 @@ export default function Payroll() {
                         <TableHead className="text-right">เงินเดือน</TableHead>
                         <TableHead className="text-right">คอม</TableHead>
                         <TableHead className="text-right">หักลาเกิน</TableHead>
+                        <TableHead className="text-right">OT</TableHead>
                         <TableHead className="text-right">ปรับปรุง</TableHead>
                         <TableHead className="text-right">รวม</TableHead>
                         <TableHead>สถานะ</TableHead>
@@ -390,7 +398,7 @@ export default function Payroll() {
                     </TableHeader>
                     <TableBody>
                       {items.length === 0 ? (
-                        <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">ไม่มีข้อมูล</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">ไม่มีข้อมูล</TableCell></TableRow>
                       ) : items.map((it) => (
                         <TableRow key={it.id}>
                           <TableCell>
@@ -418,6 +426,14 @@ export default function Payroll() {
                             ) : (
                               <span className="text-gray-400">—</span>
                             )}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            {it.otAmount > 0 ? (
+                              <>
+                                <div className="text-sky-700">+{formatCurrency(it.otAmount)}</div>
+                                <div className="text-xs text-muted-foreground">{formatDays(it.otDays)} วัน</div>
+                              </>
+                            ) : <span className="text-gray-400">—</span>}
                           </TableCell>
                           <TableCell className="text-right">
                             {it.adjustment !== 0 ? (
@@ -505,6 +521,7 @@ export default function Payroll() {
                           <TableHead className="text-right">เงินเดือน</TableHead>
                           <TableHead className="text-right">คอม</TableHead>
                           <TableHead className="text-right">หักลาเกิน</TableHead>
+                          <TableHead className="text-right">OT</TableHead>
                           <TableHead className="text-right">รวม</TableHead>
                           <TableHead>สถานะ</TableHead>
                           <TableHead className="text-right">ใบแจ้ง</TableHead>
@@ -523,6 +540,9 @@ export default function Payroll() {
                             </TableCell>
                             <TableCell className="text-right text-red-600">
                               {it.leaveDeduction > 0 ? `−${formatCurrency(it.leaveDeduction)}` : <span className="text-gray-400">—</span>}
+                            </TableCell>
+                            <TableCell className="text-right text-sky-700">
+                              {it.otAmount > 0 ? `+${formatCurrency(it.otAmount)}` : <span className="text-gray-400">—</span>}
                             </TableCell>
                             <TableCell className="text-right font-bold text-rose-600">{formatCurrency(it.totalAmount)}</TableCell>
                             <TableCell>

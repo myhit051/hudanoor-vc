@@ -79,7 +79,7 @@ export function PayslipDialog({ open, onOpenChange, item, run, shopName = "HUDAN
 
   if (!item || !run) return null;
 
-  const baseAmount = item.salary + item.totalCommission;
+  const baseAmount = item.salary + item.totalCommission + item.otAmount;
   const leaveSplit = splitLeaveDeduction(item.leaveDeduction, item.totalCommission);
 
   return (
@@ -185,6 +185,14 @@ export function PayslipDialog({ open, onOpenChange, item, run, shopName = "HUDAN
                       <td className="p-2 border text-right">{formatCurrency(line.commission)}</td>
                     </tr>
                   ))
+                )}
+                {item.otAmount > 0 && (
+                  <tr>
+                    <td className="p-2 border" colSpan={3}>
+                      ค่า OT {formatDays(item.otDays)} วัน × {formatCurrency(item.otRate ?? 0)}
+                    </td>
+                    <td className="p-2 border text-right font-medium">{formatCurrency(item.otAmount)}</td>
+                  </tr>
                 )}
                 {item.commissionForfeited > 0 && (
                   <tr>

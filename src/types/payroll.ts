@@ -18,7 +18,7 @@ export interface PayrollItem {
   homeBranch: string;
   salary: number;
   totalCommission: number;              // คอมที่ได้จริง (หลังตัดคอมเพราะลาเกินเกณฑ์แล้ว)
-  totalAmount: number;                  // salary + totalCommission - leaveDeduction + adjustment
+  totalAmount: number;                  // salary + totalCommission - leaveDeduction + otAmount + adjustment
   commissionBreakdown: PayrollCommissionLine[];
   adjustment: number;                   // โบนัส/หักเพิ่ม (+/-)
   adjustmentNote: string;
@@ -29,6 +29,9 @@ export interface PayrollItem {
   leaveBasis: 'month' | 'year';         // 'month' = รอบที่คำนวณก่อน 2 ต.ค. 2026 (โควตาต่อเดือน)
   leaveUsedBefore: number;              // วันลาสะสมในปีนี้ก่อนเดือนนี้
   leaveDayDivisor: number;              // ตัวหารค่าแรงรายวันตอนคำนวณ (รอบก่อน 2 ต.ค. 2026 = 25)
+  otDays: number;                       // วัน OT ในงวดนี้
+  otRate: number | null;                // ค่า OT ต่อวันตอนคำนวณ (null = รอบก่อนมี OT)
+  otAmount: number;
   commissionForfeited: number;          // คอมที่ถูกตัด (ลาเดือนนี้เกิน commissionLeaveLimit) — commissionBreakdown ยังเป็นยอดก่อนตัด
   commissionLeaveLimit: number | null;  // ลาเกินกี่วันในเดือนตัดคอม — null = ไม่ตัด
   status: PayrollItemStatus;
@@ -72,6 +75,9 @@ export interface PayrollPreviewItem {
   leaveBasis: 'month' | 'year';
   leaveUsedBefore: number;
   leaveDayDivisor: number;
+  otDays: number;
+  otRate: number | null;
+  otAmount: number;
   commissionForfeited: number;
   commissionLeaveLimit: number | null;
   status: PayrollItemStatus;
@@ -88,6 +94,18 @@ export interface EmployeeLeave {
   days: number;                         // 1 หรือ 0.5
   leaveType: LeaveType;
   isLump: boolean;                      // ยอดย้อนหลังทั้งเดือน ไม่ระบุวันที่
+  note: string;
+  recordedBy: string;
+  createdAt: string;
+}
+
+export interface EmployeeOvertime {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;                         // YYYY-MM-DD (ยอดทั้งเดือน = วันที่ 1)
+  days: number;
+  isLump: boolean;                      // ยอด OT ทั้งเดือน ไม่ระบุวันที่
   note: string;
   recordedBy: string;
   createdAt: string;
@@ -119,4 +137,8 @@ export interface LeaveSummaryEmployee {
   excessDays: number;
   dailyRate: number;                    // เงินเดือน ÷ leaveDayDivisor
   deduction: number;                    // ยังไม่จำกัดเพดานตามยอดคอม+เงินเดือน (หน้าจ่ายเงินเดือนจำกัดให้)
+  otDays: number;                       // OT เดือนที่เลือก
+  otMonths: number[];
+  otYearDays: number;
+  otAmount: number;
 }
