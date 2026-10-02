@@ -51,3 +51,9 @@ console.log(await call('POST', { body: [{ date: '2026-09-17', channel: 'online',
 ใน `ctx.route('**/api/**')` เรียก handler จริง (`api/sales.js`, `api/stock.js`) ด้วย req/res ปลอมแบบข้อ 1 แล้ว `r.fulfill({ status, json })`
 — หน้าเว็บคุยกับตรรกะเซิร์ฟเวอร์จริงบน `file:/tmp/xxx.db` · token ใน localStorage ต้องเป็น `signToken(...)` จริง · `/api/auth` และ `/api/settings` ยัง mock ได้
 ตัวอย่างเต็ม: แก้ออเดอร์ผ่านหน้าต่างแล้วตรวจแถวใน DB + หน้า `/stock-movements` (เคยใช้ใน `/tmp/e2e.mjs` — เขียนใหม่ตามแบบนี้)
+
+## 4) ทดสอบเงินเดือน / การลา / OT (`api/payroll.js`)
+- เตรียมข้อมูล: `employees` (salary, `branch_commissions` เป็น JSON array เช่น `[{"channel":"store","branchOrPlatform":"","commissionRate":1}]`, ตั้ง `leave_quota_yearly` ได้) + ยอดขายใส่ `legacy_sales` ตรง ๆ ง่ายสุด (id, source_row, date, channel, total_amount, import_source, recorded_by, imported_at)
+- ใส่ลา/OT ผ่าน action จริง (`set-leave-lump`, `add-leave`, `add-ot`, `set-ot-lump`) แล้ว `POST {period}` สร้างรอบ / `{period, regenerate:true}` คำนวณใหม่ · ปิดรอบ `PUT {action:'finalize', runId}`
+- เคสที่ต้องเช็คเสมอ: ตัดคอม, หักจากคอม→เงินเดือน, ยอดไม่ติดลบ, ปรับปรุงคงอยู่หลังคำนวณใหม่, `runs[].stale` ขึ้นเมื่อข้อมูล/ค่าตั้งเปลี่ยน และไม่ขึ้นกับรอบที่ปิดแล้ว (เฉพาะค่าตั้ง), staff ได้ 403
+- `action=preview` ไม่รวมยอดปรับปรุง — อย่าคาดหวังให้เท่ากับ total ของรอบ
