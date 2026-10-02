@@ -1147,6 +1147,11 @@ export function EmployeeManagement() {
                             <div className="text-xl font-bold text-purple-800 dark:text-purple-200">
                               {formatCurrency(totalCommissions)}
                             </div>
+                            {commissionReports.some((r) => (r.commissionForfeited || 0) > 0) && (
+                              <div className="text-xs text-red-600">
+                                หลังตัดคอมคนที่ลาเกิน −{formatCurrency(commissionReports.reduce((sum, r) => sum + (r.commissionForfeited || 0), 0))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </CardContent>
@@ -1178,6 +1183,11 @@ export function EmployeeManagement() {
                             <TableCell className="text-right tabular-nums">{formatCurrency(report.onlineCommission)}</TableCell>
                             <TableCell className="text-right font-semibold text-green-600 tabular-nums">
                               {formatCurrency(report.totalCommission)}
+                              {(report.commissionForfeited || 0) > 0 && (
+                                <div className="text-xs font-normal text-red-600 whitespace-nowrap">
+                                  ตัดคอม −{formatCurrency(report.commissionForfeited || 0)} (ลา {report.leaveDays} วัน เกิน {report.commissionLeaveLimit})
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className="text-right tabular-nums">{formatCurrency(report.salary)}</TableCell>
                             <TableCell className="text-right font-bold text-blue-600 tabular-nums">
@@ -1210,6 +1220,9 @@ export function EmployeeManagement() {
                         </span>
                       </div>
                     </div>
+                    <p className="mt-2 text-xs text-muted-foreground text-right">
+                      ยังไม่รวมหักลาเกินโควตาและยอดปรับปรุง — ยอดจ่ายจริงดูที่หน้าจ่ายเงินเดือน
+                    </p>
                   </div>
                 </div>
               )}

@@ -343,7 +343,7 @@ export default async function handler(req, res) {
       // Commission report (replaces former /api/commission-reports endpoint)
       if (action === 'report') {
         const empResult = await db.execute(
-          `SELECT id, name, position, salary, branch_commissions, home_branch
+          `SELECT id, name, position, salary, branch_commissions, home_branch, commission_leave_limit
            FROM employees WHERE is_active = 1 ORDER BY name`
         );
         const employees = empResult.rows.map((row) => ({
@@ -353,9 +353,12 @@ export default async function handler(req, res) {
           salary: Number(row.salary) || 0,
           homeBranch: row.home_branch || '',
           branchCommissions: safeParseJSON(row.branch_commissions, []),
+          commissionLeaveLimit: normalizeQuota(row.commission_leave_limit),
         }));
 
         const incomes = period ? await loadIncomesForPeriod(period) : [];
+        // ลาในเดือนเกินเกณฑ์ → ตัดคอม (ตรงกับหน้าจ่ายเงินเดือน)
+        const leaveMonthsByEmp = period ? await loadLeaveMonthsByEmployee(db, period.slice(0, 4)) : new Map();
         const commissionReports = employees.map((employee) => {
           let storeSales = 0;
           let onlineSales = 0;
@@ -385,7 +388,10 @@ export default async function handler(req, res) {
             }
           });
 
-          const totalCommission = storeCommission + onlineCommission;
+          const earnedCommission = storeCommission + onlineCommission;
+          const leaveDays = period ? usageForPeriod(leaveMonthsByEmp, employee.id, period).days : 0;
+          const forfeit = calcCommissionForfeit({ commission: earnedCommission, limit: employee.commissionLeaveLimit, days: leaveDays });
+          const totalCommission = earnedCommission - forfeit.forfeited;
           return {
             employeeId: employee.id,
             employeeName: employee.name,
@@ -397,6 +403,9 @@ export default async function handler(req, res) {
             storeCommission,
             onlineCommission,
             totalCommission,
+            commissionForfeited: forfeit.forfeited,
+            commissionLeaveLimit: forfeit.limit,
+            leaveDays,
             salary: employee.salary,
             totalEarnings: employee.salary + totalCommission,
             branchCommissions: employee.branchCommissions,

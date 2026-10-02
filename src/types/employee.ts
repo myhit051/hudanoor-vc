@@ -40,7 +40,10 @@ export interface EmployeeCommissionReport {
   onlineSales: number;
   storeCommission: number;
   onlineCommission: number;
-  totalCommission: number;
+  totalCommission: number;              // หลังตัดคอม (ลาในเดือนเกินเกณฑ์) — store/onlineCommission เป็นยอดก่อนตัด
+  commissionForfeited?: number;
+  commissionLeaveLimit?: number | null;
+  leaveDays?: number;
   salary: number;
   totalEarnings: number;
   branchCommissions?: BranchCommission[];
