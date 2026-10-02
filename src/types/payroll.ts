@@ -17,7 +17,7 @@ export interface PayrollItem {
   position: string;
   homeBranch: string;
   salary: number;
-  totalCommission: number;
+  totalCommission: number;              // คอมที่ได้จริง (หลังตัดคอมเพราะลาเกินเกณฑ์แล้ว)
   totalAmount: number;                  // salary + totalCommission - leaveDeduction + adjustment
   commissionBreakdown: PayrollCommissionLine[];
   adjustment: number;                   // โบนัส/หักเพิ่ม (+/-)
@@ -28,6 +28,8 @@ export interface PayrollItem {
   leaveDeduction: number;               // หักลาเกิน (บวก) — หักจากคอมก่อน ไม่พอหักจากเงินเดือน
   leaveBasis: 'month' | 'year';         // 'month' = รอบที่คำนวณก่อน 2 ต.ค. 2026 (โควตาต่อเดือน)
   leaveUsedBefore: number;              // วันลาสะสมในปีนี้ก่อนเดือนนี้
+  commissionForfeited: number;          // คอมที่ถูกตัด (ลาเดือนนี้เกิน commissionLeaveLimit) — commissionBreakdown ยังเป็นยอดก่อนตัด
+  commissionLeaveLimit: number | null;  // ลาเกินกี่วันในเดือนตัดคอม — null = ไม่ตัด
   status: PayrollItemStatus;
   paidAt: string;
   paidBy: string;
@@ -68,10 +70,13 @@ export interface PayrollPreviewItem {
   leaveDeduction: number;
   leaveBasis: 'month' | 'year';
   leaveUsedBefore: number;
+  commissionForfeited: number;
+  commissionLeaveLimit: number | null;
   status: PayrollItemStatus;
 }
 
-export type LeaveType = 'sick' | 'personal' | 'other';
+// raya = หยุดรายอ — ไม่นับเป็นวันลา ปีละไม่เกิน 3 วัน (ส่วนที่เกินนับเป็นวันลา)
+export type LeaveType = 'sick' | 'personal' | 'other' | 'raya';
 
 export interface EmployeeLeave {
   id: string;
@@ -102,8 +107,13 @@ export interface LeaveSummaryEmployee {
   leaveQuota: number | null;            // วันลาที่ได้ต่อปี
   leaveDays: number;                    // เดือนที่เลือก
   usedBefore: number;                   // สะสมในปีก่อนเดือนที่เลือก
-  months: number[];                     // วันลาแต่ละเดือนของปี (ม.ค.–ธ.ค.)
+  months: number[];                     // วันลาที่นับแต่ละเดือนของปี (ม.ค.–ธ.ค.) — ไม่รวมหยุดรายอในสิทธิ์
   yearDays: number;
+  rayaMonths: number[];                 // หยุดรายอแต่ละเดือน (ทั้งหมด รวมส่วนที่เกินสิทธิ์)
+  rayaDays: number;                     // หยุดรายอเดือนที่เลือก
+  rayaYearDays: number;                 // หยุดรายอทั้งปี
+  commissionLeaveLimit: number | null;  // ลาเกินกี่วันในเดือนตัดคอม — null = ไม่ตัด
+  commissionForfeit: boolean;           // เดือนที่เลือกลาเกินเกณฑ์ → ถูกตัดคอม
   excessDays: number;
   dailyRate: number;                    // เงินเดือน ÷ 25
   deduction: number;                    // ยังไม่จำกัดเพดานตามยอดคอม+เงินเดือน (หน้าจ่ายเงินเดือนจำกัดให้)

@@ -72,8 +72,9 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - สูตร (`lib/leaves.js`): เกินเดือนนี้ = max(0, สะสมก่อนเดือนนี้ + เดือนนี้ − โควตา) − max(0, สะสมก่อนเดือนนี้ − โควตา) → หักเฉพาะส่วนที่เกินในเดือนนั้น ไม่หักซ้ำ · หัก = วันเกิน × เงินเดือน ÷ 25 · **หักจากคอมก่อน คอมไม่พอหักจากเงินเดือน** (บอสเลือก) ยอดรับไม่ติดลบ · ลาทุกประเภทนับรวม
 - `payroll_items.total_amount` = เงินเดือน + คอม − `leave_deduction` + ปรับปรุง · ค่าการลาเป็น snapshot ตอนสร้างรอบ/คำนวณใหม่ (`leave_basis` 'year'/'month', `leave_used_before`) · รอบที่ปิดแล้วไม่เปลี่ยน · แก้การลาเดือนก่อน ๆ กระทบยอดหักเดือนหลังทั้งหมด (ต้องคำนวณใหม่เดือนที่ยังเป็นร่าง)
 - เตือน "ต้องคำนวณใหม่": `GET ?action=leaves` คืน `runs` (รอบเงินเดือนทั้งปี + `stale`) จาก `leaveRunStatus()` — หน้าบันทึกการลาแสดงทุกเดือนร่างที่ stale + ปุ่มคำนวณใหม่ทั้งหมด · หน้าจ่ายเงินเดือนเตือนเดือนที่เปิดอยู่ · แก้การลา/โควตาที่กระทบเดือนที่ปิดรอบแล้วต้อง confirm ก่อน (ไม่หัก/คืนย้อนหลังอัตโนมัติ — บอสรับทราบ)
+- **ตามสัญญาจ้าง (2 ต.ค. 2026):** ลาในเดือนเกิน `employees.commission_leave_limit` วัน → ตัดคอมเดือนนั้นทั้งหมด (NULL = ไม่ตัด) · ตัดก่อน แล้วค่อยหักลาเกินจากคอมที่เหลือ · `payroll_items.total_commission` = คอมหลังตัด, `commission_forfeited` = ส่วนที่ตัด, `commission_breakdown` = ก่อนตัด · ประเภทลา `raya` (หยุดรายอ) ไม่นับ 3 วัน/ปี (`RAYA_DAYS_PER_YEAR`) ส่วนที่เกินนับเป็นวันลาตามลำดับเดือน · ยอดย้อนหลังแยกกลุ่มรายอ/อื่น (1 แถวต่อกลุ่มต่อเดือน)
 - ยอดย้อนหลัง + วันที่ระบุในเดือนเดียวกัน **นับรวมกัน** → API คืน `notice` และฟอร์มเตือนก่อนบันทึก (ไม่บล็อก)
-- API ใน `api/payroll.js` (Admin ทั้งหมด): `GET ?action=leaves&period=` (มี `months[12]` ทั้งปีต่อคน + `runs`) · `POST {action:'add-leave'}` · `POST {action:'set-leave-lump'}` · `PUT {action:'set-leave-quota'}` · `DELETE ?action=delete-leave&id=`
+- API ใน `api/payroll.js` (Admin ทั้งหมด): `GET ?action=leaves&period=` (มี `months[12]` ทั้งปีต่อคน + `rayaMonths` + `runs`) · `POST {action:'add-leave'}` · `POST {action:'set-leave-lump'}` · `PUT {action:'set-leave-quota'}` · `PUT {action:'set-commission-leave-limit'}` · `DELETE ?action=delete-leave&id=`
 
 ## กติกาที่ตกลงกับบอสแล้ว (อย่าเปลี่ยนเองโดยไม่ถาม)
 - หน้าบันทึกยอดขาย:

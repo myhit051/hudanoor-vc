@@ -186,6 +186,14 @@ export function PayslipDialog({ open, onOpenChange, item, run, shopName = "HUDAN
                     </tr>
                   ))
                 )}
+                {item.commissionForfeited > 0 && (
+                  <tr>
+                    <td className="p-2 border" colSpan={3}>
+                      ตัดคอม — ลาเดือนนี้ {formatDays(item.leaveDays)} วัน เกิน {formatDays(item.commissionLeaveLimit ?? 0)} วัน
+                    </td>
+                    <td className="p-2 border text-right text-red-600 font-medium">−{formatCurrency(item.commissionForfeited)}</td>
+                  </tr>
+                )}
                 <tr className="bg-gray-50 font-semibold">
                   <td className="p-2 border" colSpan={3}>รวมรายการรับ</td>
                   <td className="p-2 border text-right">{formatCurrency(baseAmount)}</td>

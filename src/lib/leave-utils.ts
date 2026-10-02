@@ -4,6 +4,7 @@ export const LEAVE_TYPE_LABEL: Record<LeaveType, string> = {
   sick: 'ลาป่วย',
   personal: 'ลากิจ',
   other: 'อื่น ๆ',
+  raya: 'หยุดรายอ',
 };
 
 // 2 → "2", 1.5 → "1.5"

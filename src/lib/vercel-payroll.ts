@@ -144,7 +144,9 @@ export async function deletePayrollRun(runId: string) {
 }
 
 // ─── การลา (Admin เท่านั้น) ───
-export async function getLeaves(period: string): Promise<{ year: string; employees: LeaveSummaryEmployee[]; runs: LeaveRunStatus[]; leaves: EmployeeLeave[] }> {
+export async function getLeaves(period: string): Promise<{
+  year: string; employees: LeaveSummaryEmployee[]; runs: LeaveRunStatus[]; rayaDaysPerYear: number; leaves: EmployeeLeave[];
+}> {
   const res = await fetch(`${API_BASE}/payroll?action=leaves&period=${encodeURIComponent(period)}`, {
     headers: { ...authHeaders() },
   });
@@ -153,6 +155,7 @@ export async function getLeaves(period: string): Promise<{ year: string; employe
     year: data?.year || period.slice(0, 4),
     employees: Array.isArray(data?.employees) ? data.employees : [],
     runs: Array.isArray(data?.runs) ? data.runs : [],
+    rayaDaysPerYear: Number(data?.rayaDaysPerYear) || 3,
     leaves: Array.isArray(data?.leaves) ? data.leaves : [],
   };
 }
@@ -197,12 +200,17 @@ export async function deleteLeave(id: string) {
   return handleJson(res);
 }
 
-// employeeId = รายคน · all = ทุกคนที่ยังทำงาน · quota null = ยกเลิก (ไม่หัก)
-export async function setLeaveQuota(target: { employeeId: string } | { all: true }, quota: number | null) {
+// employeeId = รายคน · all = ทุกคนที่ยังทำงาน · quota null = ยกเลิก (ไม่หัก/ไม่ตัด)
+// kind 'yearly' = วันลาที่ได้ต่อปี · 'commission' = ลาเกินกี่วันในเดือนตัดคอม
+export async function setLeaveQuota(
+  target: { employeeId: string } | { all: true },
+  quota: number | null,
+  kind: 'yearly' | 'commission' = 'yearly',
+) {
   const res = await fetch(`${API_BASE}/payroll`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ action: 'set-leave-quota', ...target, quota }),
+    body: JSON.stringify({ action: kind === 'yearly' ? 'set-leave-quota' : 'set-commission-leave-limit', ...target, quota }),
   });
   return handleJson(res);
 }

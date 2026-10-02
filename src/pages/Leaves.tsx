@@ -62,15 +62,17 @@ const TYPE_BADGE: Record<LeaveType, string> = {
   sick: "bg-sky-50 text-sky-700 border-sky-200",
   personal: "bg-amber-50 text-amber-700 border-amber-200",
   other: "bg-gray-50 text-gray-700 border-gray-200",
+  raya: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 
 const quotaText = (q: number | null) => (q === null ? "" : String(q));
 
-function QuotaInput({ employeeName, value, onSave, saving }: {
-  employeeName: string;
+function QuotaInput({ label, value, onSave, saving, max = 366 }: {
+  label: string;
   value: number | null;
   onSave: (v: number | null) => void;
   saving: boolean;
+  max?: number;
 }) {
   const [draft, setDraft] = useState(quotaText(value));
   useEffect(() => setDraft(quotaText(value)), [value]);
@@ -85,17 +87,17 @@ function QuotaInput({ employeeName, value, onSave, saving }: {
         type="number"
         inputMode="decimal"
         min={0}
-        max={366}
+        max={max}
         step={0.5}
         value={draft}
         placeholder="ไม่ตั้ง"
-        aria-label={`วันลาที่ได้ต่อปีของ ${employeeName}`}
+        aria-label={label}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") commit(); }}
         className="h-9 w-20 text-right"
       />
       {dirty && (
-        <Button size="sm" className="h-9 px-2" onClick={commit} disabled={saving} aria-label={`บันทึกวันลาที่ได้ของ ${employeeName}`}>
+        <Button size="sm" className="h-9 px-2" onClick={commit} disabled={saving} aria-label={`บันทึก${label}`}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
         </Button>
       )}
@@ -171,17 +173,21 @@ export function Leaves() {
   const dayCount = halfDay ? (startDate ? 0.5 : 0) : countDays(startDate, endDate);
   const rangeInvalid = !halfDay && !!endDate && countDays(startDate, endDate) === 0;
 
+  // หยุดรายอกับการลาอื่นแยกกลุ่มกัน (ยอดย้อนหลังได้กลุ่มละ 1 แถวต่อเดือน)
+  const sameGroup = (t: LeaveType) => (t === "raya") === (leaveType === "raya");
   // ยอดย้อนหลังที่มีอยู่แล้วของคน+เดือนที่เลือก (ใส่ใหม่จะแทนที่)
   const existingLump = mode === "lump" && lumpPeriod === selectedPeriod
-    ? leaves.find((l) => l.isLump && l.employeeId === employeeId)
+    ? leaves.find((l) => l.isLump && l.employeeId === employeeId && sameGroup(l.leaveType))
     : undefined;
   // อีกแบบที่มีอยู่แล้วในเดือนเดียวกัน → นับรวมกัน (อาจซ้ำ) เตือนก่อนบันทึก
   const datedInLumpMonth = mode === "lump" && lumpPeriod === selectedPeriod
-    ? leaves.filter((l) => !l.isLump && l.employeeId === employeeId).reduce((s, l) => s + l.days, 0)
+    ? leaves.filter((l) => !l.isLump && l.employeeId === employeeId && sameGroup(l.leaveType)).reduce((s, l) => s + l.days, 0)
     : 0;
   const lumpInDatedMonth = mode === "dated" && startDate.startsWith(selectedPeriod)
-    ? leaves.find((l) => l.isLump && l.employeeId === employeeId)
+    ? leaves.find((l) => l.isLump && l.employeeId === employeeId && sameGroup(l.leaveType))
     : undefined;
+  const rayaPerYear = data?.rayaDaysPerYear ?? 3;
+  const formEmployee = employees.find((e) => e.id === employeeId);
 
   // แก้การลาเดือน month → กระทบเดือนนั้นและเดือนหลัง ๆ ในปีเดียวกัน ถ้าบางเดือนปิดรอบแล้วจะไม่หัก/คืนย้อนหลัง → ถามก่อน
   const confirmClosedMonths = (month: string) => {
@@ -245,20 +251,26 @@ export function Leaves() {
 
   const [savingQuotaFor, setSavingQuotaFor] = useState<string | null>(null);
   const quotaMutation = useMutation({
-    mutationFn: ({ target, quota }: { target: { employeeId: string } | { all: true }; quota: number | null }) =>
-      setLeaveQuota(target, quota),
-    onMutate: ({ target }) => setSavingQuotaFor("all" in target ? "all" : target.employeeId),
+    mutationFn: ({ target, quota, kind }: {
+      target: { employeeId: string } | { all: true }; quota: number | null; kind: "yearly" | "commission";
+    }) => setLeaveQuota(target, quota, kind),
+    onMutate: ({ target, kind }) => setSavingQuotaFor(`${kind}:${"all" in target ? "all" : target.employeeId}`),
     onSettled: () => setSavingQuotaFor(null),
-    onSuccess: async (_r, { quota }) => {
-      toast({ title: quota === null ? "ยกเลิกวันลาที่ได้แล้ว (ไม่หัก)" : `ตั้งวันลาที่ได้ ${formatDays(quota)} วัน/ปีแล้ว` });
+    onSuccess: async (_r, { quota, kind }) => {
+      toast({
+        title: kind === "yearly"
+          ? (quota === null ? "ยกเลิกวันลาที่ได้แล้ว (ไม่หัก)" : `ตั้งวันลาที่ได้ ${formatDays(quota)} วัน/ปีแล้ว`)
+          : (quota === null ? "ยกเลิกเกณฑ์ตัดคอมแล้ว (ไม่ตัด)" : `ตั้งแล้ว: ลาเกิน ${formatDays(quota)} วันในเดือน ตัดคอมเดือนนั้น`),
+      });
       await invalidateLeaves();
     },
     onError: (err: any) => {
-      toast({ title: "ตั้งวันลาไม่สำเร็จ", description: err.message || "", variant: "destructive" });
+      toast({ title: "บันทึกไม่สำเร็จ", description: err.message || "", variant: "destructive" });
     },
   });
 
   const [allQuota, setAllQuota] = useState("");
+  const [allLimit, setAllLimit] = useState("");
 
   const submitLeave = () => {
     if (!employeeId) {
@@ -295,7 +307,15 @@ export function Leaves() {
     const text = quota === null ? "ยกเลิกวันลาที่ได้ (ไม่หัก)" : `ตั้งวันลาที่ได้ ${formatDays(quota)} วัน/ปี`;
     if (!confirm(`${text} ให้พนักงานทุกคน?`)) return;
     if (!confirmClosedMonths(`${year}-01`)) return;
-    quotaMutation.mutate({ target: { all: true }, quota });
+    quotaMutation.mutate({ target: { all: true }, quota, kind: "yearly" });
+  };
+
+  const applyAllLimit = () => {
+    const quota = allLimit.trim() === "" ? null : Number(allLimit);
+    const text = quota === null ? "ยกเลิกเกณฑ์ตัดคอม (ไม่ตัด)" : `ตั้งเกณฑ์ ลาเกิน ${formatDays(quota)} วันในเดือน ตัดคอมเดือนนั้น`;
+    if (!confirm(`${text} ให้พนักงานทุกคน?`)) return;
+    if (!confirmClosedMonths(`${year}-01`)) return;
+    quotaMutation.mutate({ target: { all: true }, quota, kind: "commission" });
   };
 
   const [filterEmployee, setFilterEmployee] = useState("all");
@@ -313,8 +333,10 @@ export function Leaves() {
     leaveDays: employees.reduce((s, e) => s + e.leaveDays, 0),
     deduction: employees.reduce((s, e) => s + e.deduction, 0),
     overCount: employees.filter((e) => e.excessDays > 0).length,
+    forfeitCount: employees.filter((e) => e.commissionForfeit).length,
   }), [employees]);
   const noQuotaCount = employees.filter((e) => e.leaveQuota === null).length;
+  const noLimitCount = employees.filter((e) => e.commissionLeaveLimit === null).length;
 
   // รอบเงินเดือนฉบับร่างในปีนี้ที่คิดจากข้อมูลการลาชุดเก่า (เช่น เพิ่งใส่ยอดย้อนหลังเดือนก่อน ๆ) → ต้องคำนวณใหม่
   const staleDrafts = runs.filter((r) => r.stale && r.status === "draft");
@@ -345,6 +367,7 @@ export function Leaves() {
           </h1>
           <p className="text-muted-foreground mt-1">
             ลาสะสมเกินวันที่ได้ต่อปี (ม.ค.–ธ.ค.) หักวันละ เงินเดือน ÷ 25 ในเดือนที่เกิน — หักจากคอมก่อน คอมไม่พอหักจากเงินเดือน
+            · ลาในเดือนเกินเกณฑ์ = ไม่ได้คอมเดือนนั้น · หยุดรายอ {rayaPerYear} วัน/ปี ไม่นับเป็นวันลา
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -516,7 +539,13 @@ export function Leaves() {
 
               <div className="space-y-1.5">
                 <Label>ประเภท</Label>
-                <SegmentedButtons<LeaveType> label="ประเภทการลา" cols="grid-cols-3" value={leaveType} onChange={setLeaveType} options={LEAVE_TYPE_OPTIONS} />
+                <SegmentedButtons<LeaveType> label="ประเภทการลา" cols="grid-cols-2" value={leaveType} onChange={setLeaveType} options={LEAVE_TYPE_OPTIONS} />
+                {leaveType === "raya" && (
+                  <p className="text-xs text-emerald-700">
+                    หยุดรายอไม่นับเป็นวันลา ได้ปีละ {rayaPerYear} วัน — เกินจากนี้นับเป็นวันลาปกติ
+                    {formEmployee && ` · ${formEmployee.name} ใช้ไปแล้ว ${formatDays(formEmployee.rayaYearDays)} วันในปี ${buddhistYear(year)}`}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -543,6 +572,7 @@ export function Leaves() {
               <CardTitle className="text-lg">สรุปการลา {monthLabel(selectedPeriod)}</CardTitle>
               <CardDescription>
                 ลาเดือนนี้รวม {formatDays(totals.leaveDays)} วัน · ลาเกิน {totals.overCount} คน · หักรวมประมาณ {formatCurrency(totals.deduction)}
+                {totals.forfeitCount > 0 && ` · ถูกตัดคอม ${totals.forfeitCount} คน`}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -550,6 +580,12 @@ export function Leaves() {
                 <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>ยังไม่ได้ตั้งวันลาที่ได้ต่อปี {noQuotaCount} คน — คนที่ยังไม่ตั้งจะไม่ถูกหัก (ตั้งได้ในตาราง "การลาทั้งปี" ด้านล่าง)</span>
+                </div>
+              )}
+              {noLimitCount > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>ยังไม่ได้ตั้งเกณฑ์ตัดคอม {noLimitCount} คน — คนที่ยังไม่ตั้ง ลากี่วันก็ยังได้คอม (ตั้งได้ในตาราง "การลาทั้งปี" ด้านล่าง)</span>
                 </div>
               )}
               <div className="overflow-x-auto">
@@ -562,23 +598,27 @@ export function Leaves() {
                       <TableHead className="text-right">เกินเดือนนี้</TableHead>
                       <TableHead className="text-right">หักวันละ</TableHead>
                       <TableHead className="text-right">ยอดหัก</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">คอมเดือนนี้</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
-                      <TableRow><TableCell colSpan={6} className="py-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="py-8 text-center"><Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
                     ) : employees.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">ไม่มีพนักงาน</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">ไม่มีพนักงาน</TableCell></TableRow>
                     ) : employees.map((e) => {
                       const cumulative = e.usedBefore + e.leaveDays;
                       const over = e.leaveQuota !== null && cumulative > e.leaveQuota;
                       return (
-                        <TableRow key={e.id} className={cn(e.excessDays > 0 && "bg-red-50/60")}>
+                        <TableRow key={e.id} className={cn((e.excessDays > 0 || e.commissionForfeit) && "bg-red-50/60")}>
                           <TableCell>
                             <div className="font-medium">{e.name}</div>
                             <div className="text-xs text-muted-foreground">เงินเดือน {formatCurrency(e.salary)}</div>
                           </TableCell>
-                          <TableCell className="text-right">{e.leaveDays > 0 ? formatDays(e.leaveDays) : <span className="text-gray-400">0</span>}</TableCell>
+                          <TableCell className="text-right">
+                            {e.leaveDays > 0 ? formatDays(e.leaveDays) : <span className="text-gray-400">0</span>}
+                            {e.rayaDays > 0 && <div className="text-xs text-emerald-700 whitespace-nowrap">+ รายอ {formatDays(e.rayaDays)}</div>}
+                          </TableCell>
                           <TableCell className="text-right whitespace-nowrap">
                             <span className={cn(over && "font-semibold text-red-600")}>{formatDays(cumulative)}</span>
                             <span className="text-muted-foreground"> / {e.leaveQuota === null ? "ไม่ตั้ง" : formatDays(e.leaveQuota)}</span>
@@ -589,6 +629,18 @@ export function Leaves() {
                           <TableCell className="text-right text-sm text-muted-foreground">{formatCurrency(e.dailyRate)}</TableCell>
                           <TableCell className="text-right">
                             {e.deduction > 0 ? <span className="font-semibold text-red-600">−{formatCurrency(e.deduction)}</span> : <span className="text-gray-400">—</span>}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            {e.commissionLeaveLimit === null ? (
+                              <span className="text-xs text-muted-foreground">ไม่ตั้งเกณฑ์</span>
+                            ) : e.commissionForfeit ? (
+                              <>
+                                <Badge variant="outline" className="border-red-300 bg-red-50 text-red-700">ตัดคอม</Badge>
+                                <div className="text-xs text-muted-foreground">ลาเกิน {formatDays(e.commissionLeaveLimit)} วัน</div>
+                              </>
+                            ) : (
+                              <span className="text-xs text-emerald-700">ได้คอม (ลาได้อีก {formatDays(e.commissionLeaveLimit - e.leaveDays)})</span>
+                            )}
                           </TableCell>
                         </TableRow>
                       );
@@ -628,10 +680,35 @@ export function Leaves() {
                   </div>
                 </div>
                 <Button size="sm" variant="outline" className="h-9" onClick={applyAllQuota} disabled={quotaMutation.isPending || employees.length === 0}>
-                  {savingQuotaFor === "all" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {savingQuotaFor === "yearly:all" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   ใช้กับทุกคน
                 </Button>
-                <span className="text-xs text-muted-foreground basis-full">แก้รายคนได้ในช่อง "ได้/ปี" · เว้นว่าง = ยังไม่ตั้ง (ไม่หัก) · นับใหม่ทุก 1 ม.ค.</span>
+                <div className="space-y-1.5 sm:ml-4">
+                  <Label htmlFor="all-limit" className="text-sm">ลาในเดือนเกินกี่วัน ตัดคอม — ตั้งให้ทุกคน</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="all-limit"
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      max={31}
+                      step={0.5}
+                      value={allLimit}
+                      onChange={(e) => setAllLimit(e.target.value)}
+                      placeholder="เช่น 5"
+                      className="h-9 w-24 text-right"
+                    />
+                    <span className="text-sm text-muted-foreground">วัน/เดือน</span>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" className="h-9" onClick={applyAllLimit} disabled={quotaMutation.isPending || employees.length === 0}>
+                  {savingQuotaFor === "commission:all" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  ใช้กับทุกคน
+                </Button>
+                <span className="text-xs text-muted-foreground basis-full">
+                  แก้รายคนได้ในช่อง "ได้/ปี" และ "ตัดคอมถ้าลาเกิน" · เว้นว่าง = ยังไม่ตั้ง (ไม่หัก/ไม่ตัด) · วันลานับใหม่ทุก 1 ม.ค.
+                  · ตัวเลขสีแดงในตาราง = เดือนที่ลาเกินเกณฑ์ (ไม่ได้คอม)
+                </span>
               </div>
 
               <div className="overflow-x-auto">
@@ -645,39 +722,49 @@ export function Leaves() {
                       <TableHead className="text-right whitespace-nowrap">รวม</TableHead>
                       <TableHead className="text-right whitespace-nowrap">ได้/ปี</TableHead>
                       <TableHead className="text-right whitespace-nowrap">คงเหลือ</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">รายอ</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">ตัดคอมถ้าลาเกิน</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {employees.length === 0 ? (
-                      <TableRow><TableCell colSpan={16} className="py-8 text-center text-muted-foreground">{isLoading ? "กำลังโหลด..." : "ไม่มีพนักงาน"}</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={18} className="py-8 text-center text-muted-foreground">{isLoading ? "กำลังโหลด..." : "ไม่มีพนักงาน"}</TableCell></TableRow>
                     ) : employees.map((e) => {
                       const remaining = e.leaveQuota === null ? null : e.leaveQuota - e.yearDays;
                       return (
                         <TableRow key={e.id}>
                           <TableCell className="sticky left-0 z-10 bg-background font-medium whitespace-nowrap">{e.name}</TableCell>
-                          {e.months.map((d, i) => (
-                            <TableCell key={i} className={cn("text-center px-1", i === selectedMonthIdx && "bg-rose-50/60")}>
-                              {d > 0 ? (
-                                <button
-                                  type="button"
-                                  onClick={() => openMonth(e.id, i)}
-                                  className="min-h-0 min-w-0 rounded px-1.5 py-0.5 font-medium text-rose-700 underline-offset-2 hover:bg-rose-100 hover:underline"
-                                  aria-label={`ดูการลา ${e.name} ${MONTH_SHORT[i]} ${formatDays(d)} วัน`}
-                                >
-                                  {formatDays(d)}
-                                </button>
-                              ) : (
-                                <span className="text-gray-300">·</span>
-                              )}
-                            </TableCell>
-                          ))}
+                          {e.months.map((d, i) => {
+                            const raya = e.rayaMonths?.[i] || 0;
+                            const forfeit = e.commissionLeaveLimit !== null && d > e.commissionLeaveLimit;
+                            return (
+                              <TableCell key={i} className={cn("text-center px-1", i === selectedMonthIdx && "bg-rose-50/60")}>
+                                {d > 0 || raya > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openMonth(e.id, i)}
+                                    className={cn(
+                                      "min-h-0 min-w-0 rounded px-1.5 py-0.5 font-medium underline-offset-2 hover:bg-rose-100 hover:underline",
+                                      forfeit ? "bg-red-100 text-red-700" : "text-rose-700",
+                                    )}
+                                    aria-label={`ดูการลา ${e.name} ${MONTH_SHORT[i]} ${formatDays(d)} วัน${raya > 0 ? ` หยุดรายอ ${formatDays(raya)} วัน` : ""}${forfeit ? " ตัดคอม" : ""}`}
+                                  >
+                                    {d > 0 ? formatDays(d) : ""}
+                                    {raya > 0 && <span className="block text-[10px] leading-tight text-emerald-700">รายอ {formatDays(raya)}</span>}
+                                  </button>
+                                ) : (
+                                  <span className="text-gray-300">·</span>
+                                )}
+                              </TableCell>
+                            );
+                          })}
                           <TableCell className="text-right font-semibold">{formatDays(e.yearDays)}</TableCell>
                           <TableCell className="text-right">
                             <QuotaInput
-                              employeeName={e.name}
+                              label={`วันลาที่ได้ต่อปีของ ${e.name}`}
                               value={e.leaveQuota}
-                              saving={savingQuotaFor === e.id}
-                              onSave={(quota) => { if (confirmClosedMonths(`${year}-01`)) quotaMutation.mutate({ target: { employeeId: e.id }, quota }); }}
+                              saving={savingQuotaFor === `yearly:${e.id}`}
+                              onSave={(quota) => { if (confirmClosedMonths(`${year}-01`)) quotaMutation.mutate({ target: { employeeId: e.id }, quota, kind: "yearly" }); }}
                             />
                           </TableCell>
                           <TableCell className="text-right whitespace-nowrap">
@@ -688,6 +775,18 @@ export function Leaves() {
                             ) : (
                               <span className="font-semibold text-red-600">เกิน {formatDays(-remaining)}</span>
                             )}
+                          </TableCell>
+                          <TableCell className={cn("text-right whitespace-nowrap", e.rayaYearDays > rayaPerYear && "font-semibold text-red-600")}>
+                            {formatDays(e.rayaYearDays)}/{rayaPerYear}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <QuotaInput
+                              label={`ลาในเดือนเกินกี่วันตัดคอมของ ${e.name}`}
+                              value={e.commissionLeaveLimit}
+                              max={31}
+                              saving={savingQuotaFor === `commission:${e.id}`}
+                              onSave={(quota) => { if (confirmClosedMonths(`${year}-01`)) quotaMutation.mutate({ target: { employeeId: e.id }, quota, kind: "commission" }); }}
+                            />
                           </TableCell>
                         </TableRow>
                       );

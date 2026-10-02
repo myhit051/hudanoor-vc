@@ -399,7 +399,14 @@ export default function Payroll() {
                           </TableCell>
                           <TableCell className="text-sm">{it.homeBranch || "-"}</TableCell>
                           <TableCell className="text-right">{formatCurrency(it.salary)}</TableCell>
-                          <TableCell className="text-right text-emerald-600">{formatCurrency(it.totalCommission)}</TableCell>
+                          <TableCell className="text-right text-emerald-600">
+                            {formatCurrency(it.totalCommission)}
+                            {it.commissionForfeited > 0 && (
+                              <div className="text-xs text-red-600 whitespace-nowrap">
+                                ตัดคอม {formatCurrency(it.commissionForfeited)} (ลา {formatDays(it.leaveDays)} วัน)
+                              </div>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">
                             {it.leaveDeduction > 0 ? (
                               <>
@@ -508,7 +515,12 @@ export default function Payroll() {
                           <TableRow key={it.id}>
                             <TableCell className="font-medium">{it.employeeName}</TableCell>
                             <TableCell className="text-right">{formatCurrency(it.salary)}</TableCell>
-                            <TableCell className="text-right text-emerald-600">{formatCurrency(it.totalCommission)}</TableCell>
+                            <TableCell className="text-right text-emerald-600">
+                              {formatCurrency(it.totalCommission)}
+                              {it.commissionForfeited > 0 && (
+                                <div className="text-xs text-red-600 whitespace-nowrap">ตัดคอม {formatCurrency(it.commissionForfeited)}</div>
+                              )}
+                            </TableCell>
                             <TableCell className="text-right text-red-600">
                               {it.leaveDeduction > 0 ? `−${formatCurrency(it.leaveDeduction)}` : <span className="text-gray-400">—</span>}
                             </TableCell>

@@ -3,8 +3,8 @@ import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate, requireAdmin } from '../lib/auth-middleware.js';
 import { parseSheetDate } from '../lib/sheet-date.js';
 import {
-  LEAVE_TYPES, MAX_YEARLY_QUOTA, calcLeaveDeduction, expandDates, isValidDate, loadLeaveMonthsByEmployee,
-  normalizeQuota, rowToLeave, usageForPeriod,
+  LEAVE_TYPES, MAX_COMMISSION_LEAVE_LIMIT, MAX_YEARLY_QUOTA, RAYA_DAYS_PER_YEAR, calcCommissionForfeit,
+  calcLeaveDeduction, expandDates, isValidDate, loadLeaveMonthsByEmployee, normalizeQuota, rowToLeave, usageForPeriod,
 } from '../lib/leaves.js';
 
 // Read all rows from a Google Sheet range (used for legacy import).
@@ -93,6 +93,8 @@ function rowToItem(row) {
     leaveDeduction: Number(row.leave_deduction) || 0,
     leaveBasis: row.leave_basis === 'year' ? 'year' : 'month',
     leaveUsedBefore: Number(row.leave_used_before) || 0,
+    commissionForfeited: Number(row.commission_forfeited) || 0,
+    commissionLeaveLimit: normalizeQuota(row.commission_leave_limit),
     status: row.status,
     paidAt: row.paid_at || '',
     paidBy: row.paid_by || '',
@@ -112,13 +114,18 @@ function rowToPayrollEmployee(row) {
     salary: Number(row.salary) || 0,
     branchCommissions: safeParseJSON(row.branch_commissions, []),
     leaveQuota: normalizeQuota(row.leave_quota_yearly),
+    commissionLeaveLimit: normalizeQuota(row.commission_leave_limit),
   };
 }
 
 // เงินเดือน + คอม − หักลาเกิน (ยังไม่รวมช่อง "ปรับปรุง")
+// ลาเดือนนี้เกินเกณฑ์ → ตัดคอมทั้งเดือนก่อน แล้วค่อยหักลาเกินจากคอมที่เหลือ (ไม่พอหักจากเงินเดือน)
+// totalCommission ที่คืน = คอมที่ได้จริงหลังตัด · breakdown ยังเป็นคอมที่คิดได้ก่อนตัด
 function computePayrollItem(emp, incomes, leaveMonthsByEmp, period) {
-  const { breakdown, totalCommission } = calcEmployeeCommission(emp, incomes);
+  const { breakdown, totalCommission: earnedCommission } = calcEmployeeCommission(emp, incomes);
   const usage = usageForPeriod(leaveMonthsByEmp, emp.id, period);
+  const forfeit = calcCommissionForfeit({ commission: earnedCommission, limit: emp.commissionLeaveLimit, days: usage.days });
+  const totalCommission = earnedCommission - forfeit.forfeited;
   const leave = calcLeaveDeduction({
     salary: emp.salary,
     commission: totalCommission,
@@ -129,6 +136,7 @@ function computePayrollItem(emp, incomes, leaveMonthsByEmp, period) {
   return {
     breakdown,
     totalCommission,
+    forfeit,
     leave,
     baseAmount: emp.salary + totalCommission - leave.deduction,
   };
@@ -139,12 +147,14 @@ async function leaveRunStatus(db, year, employees, leaveMonthsByEmp) {
   const [runResult, itemResult] = await Promise.all([
     db.execute({ sql: `SELECT id, period, status FROM payroll_runs WHERE period LIKE ? ORDER BY period`, args: [`${year}-%`] }),
     db.execute({
-      sql: `SELECT i.payroll_run_id, i.employee_id, i.leave_days, i.leave_quota, i.leave_basis, i.leave_used_before
+      sql: `SELECT i.payroll_run_id, i.employee_id, i.leave_days, i.leave_quota, i.leave_basis, i.leave_used_before,
+              i.commission_leave_limit
             FROM payroll_items i JOIN payroll_runs r ON r.id = i.payroll_run_id WHERE r.period LIKE ?`,
       args: [`${year}-%`],
     }),
   ]);
   const quotaByEmp = new Map(employees.map((e) => [e.id, e.leaveQuota]));
+  const limitByEmp = new Map(employees.map((e) => [e.id, e.commissionLeaveLimit]));
   const staleRuns = new Set();
   const runPeriod = new Map(runResult.rows.map((r) => [r.id, r.period]));
   for (const it of itemResult.rows) {
@@ -155,6 +165,7 @@ async function leaveRunStatus(db, year, employees, leaveMonthsByEmp) {
       || (Number(it.leave_days) || 0) !== usage.days
       || (Number(it.leave_used_before) || 0) !== usage.usedBefore
       || normalizeQuota(it.leave_quota) !== quotaByEmp.get(it.employee_id)
+      || normalizeQuota(it.commission_leave_limit) !== limitByEmp.get(it.employee_id)
     ) staleRuns.add(it.payroll_run_id);
   }
   return runResult.rows.map((r) => ({ period: r.period, status: r.status, stale: staleRuns.has(r.id) }));
@@ -271,6 +282,7 @@ export default async function handler(req, res) {
             days: usage.days,
             usedBefore: usage.usedBefore,
           });
+          const idx = Number(period.slice(5, 7)) - 1;
           return {
             id: emp.id,
             name: emp.name,
@@ -282,13 +294,20 @@ export default async function handler(req, res) {
             usedBefore: leave.usedBefore,
             months: usage.months,
             yearDays: usage.months.reduce((s, d) => s + d, 0),
+            rayaMonths: usage.rayaMonths,
+            rayaDays: usage.rayaMonths[idx] || 0,
+            rayaYearDays: usage.rayaMonths.reduce((s, d) => s + d, 0),
+            commissionLeaveLimit: emp.commissionLeaveLimit,
+            commissionForfeit: emp.commissionLeaveLimit !== null && usage.days > emp.commissionLeaveLimit,
             excessDays: leave.excessDays,
             dailyRate: leave.dailyRate,
             deduction: leave.deduction,
           };
         });
         const runs = await leaveRunStatus(db, year, empResult.rows.map(rowToPayrollEmployee), leaveMonthsByEmp);
-        return res.status(200).json({ period, year, employees, runs, leaves: leaveResult.rows.map(rowToLeave) });
+        return res.status(200).json({
+          period, year, employees, runs, rayaDaysPerYear: RAYA_DAYS_PER_YEAR, leaves: leaveResult.rows.map(rowToLeave),
+        });
       }
 
       // Preview legacy sales import — show counts based on row position
@@ -404,7 +423,7 @@ export default async function handler(req, res) {
         const incomes = await loadIncomesForPeriod(period);
         const leaveMonthsByEmp = await loadLeaveMonthsByEmployee(db, period.slice(0, 4));
         const items = employees.map((emp) => {
-          const { breakdown, totalCommission, leave, baseAmount } = computePayrollItem(emp, incomes, leaveMonthsByEmp, period);
+          const { breakdown, totalCommission, forfeit, leave, baseAmount } = computePayrollItem(emp, incomes, leaveMonthsByEmp, period);
           return {
             employeeId: emp.id,
             employeeName: emp.name,
@@ -420,6 +439,8 @@ export default async function handler(req, res) {
             leaveDeduction: leave.deduction,
             leaveBasis: 'year',
             leaveUsedBefore: leave.usedBefore,
+            commissionForfeited: forfeit.forfeited,
+            commissionLeaveLimit: forfeit.limit,
             status: 'pending',
           };
         });
@@ -607,8 +628,8 @@ export default async function handler(req, res) {
         const months = [...new Set(dates.map((d) => d.slice(0, 7)))];
         const lumps = await db.execute({
           sql: `SELECT date, days FROM employee_leaves WHERE employee_id = ? AND is_lump = 1
-                AND date IN (${months.map(() => '?').join(',')})`,
-          args: [employeeId, ...months.map((m) => `${m}-01`)],
+                AND (leave_type = 'raya') = ? AND date IN (${months.map(() => '?').join(',')})`,
+          args: [employeeId, type === 'raya' ? 1 : 0, ...months.map((m) => `${m}-01`)],
         });
         const notice = lumps.rows.length > 0
           ? `เดือนนี้มียอดย้อนหลังทั้งเดือนอยู่แล้ว ${lumps.rows.map((r) => `${Number(r.days)} วัน`).join(', ')} — นับรวมกับวันที่บันทึกนี้`
@@ -616,7 +637,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, created: dates.length, notice });
       }
 
-      // ยอดลาย้อนหลังทั้งเดือน (ไม่รู้วันที่) — 1 แถวต่อคนต่อเดือน ใส่ใหม่ = แทนที่ของเดิม · days 0 = ลบ
+      // ยอดลาย้อนหลังทั้งเดือน (ไม่รู้วันที่) — 1 แถวต่อคนต่อเดือน (หยุดรายอแยกอีก 1 แถว)
+      // ใส่ใหม่ = แทนที่ของเดิมกลุ่มเดียวกัน · days 0 = ลบ
       if (req.body?.action === 'set-leave-lump') {
         const { employeeId, period: lumpPeriod, leaveType, note: lumpNote } = req.body;
         const days = Number(req.body.days) || 0;
@@ -630,10 +652,12 @@ export default async function handler(req, res) {
           args: [employeeId],
         });
         if (empResult.rows.length === 0) return res.status(400).json({ error: 'ไม่พบพนักงานนี้' });
+        const type = LEAVE_TYPES.includes(leaveType) ? leaveType : 'other';
+        const rayaFlag = type === 'raya' ? 1 : 0;
 
         const stmts = [{
-          sql: `DELETE FROM employee_leaves WHERE employee_id = ? AND is_lump = 1 AND date = ?`,
-          args: [employeeId, `${lumpPeriod}-01`],
+          sql: `DELETE FROM employee_leaves WHERE employee_id = ? AND is_lump = 1 AND date = ? AND (leave_type = 'raya') = ?`,
+          args: [employeeId, `${lumpPeriod}-01`, rayaFlag],
         }];
         if (days > 0) {
           stmts.push({
@@ -641,8 +665,7 @@ export default async function handler(req, res) {
                   (id, employee_id, employee_name, date, days, leave_type, note, recorded_by, created_at, is_lump)
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
             args: [`leave_lump_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, employeeId,
-              empResult.rows[0].name || '', `${lumpPeriod}-01`, days,
-              LEAVE_TYPES.includes(leaveType) ? leaveType : 'other', String(lumpNote || '').trim(),
+              empResult.rows[0].name || '', `${lumpPeriod}-01`, days, type, String(lumpNote || '').trim(),
               authUser?.name || '', new Date().toISOString()],
           });
         }
@@ -652,8 +675,8 @@ export default async function handler(req, res) {
         if (days > 0) {
           const dated = await db.execute({
             sql: `SELECT COALESCE(SUM(days), 0) AS total FROM employee_leaves
-                  WHERE employee_id = ? AND is_lump = 0 AND date LIKE ?`,
-            args: [employeeId, `${lumpPeriod}-%`],
+                  WHERE employee_id = ? AND is_lump = 0 AND (leave_type = 'raya') = ? AND date LIKE ?`,
+            args: [employeeId, rayaFlag, `${lumpPeriod}-%`],
           });
           const total = Number(dated.rows[0]?.total) || 0;
           if (total > 0) notice = `เดือนนี้มีวันลาแบบระบุวันที่อยู่แล้ว ${total} วัน — นับรวมกับยอดย้อนหลังนี้`;
@@ -697,12 +720,13 @@ export default async function handler(req, res) {
 
       // Compute items
       const computed = employees.map((emp) => {
-        const { breakdown, totalCommission, leave, baseAmount } = computePayrollItem(emp, incomes, leaveMonthsByEmp, period);
+        const { breakdown, totalCommission, forfeit, leave, baseAmount } = computePayrollItem(emp, incomes, leaveMonthsByEmp, period);
         return {
           id: `pitem_${runId}_${emp.id}`,
           employee: emp,
           totalCommission,
           breakdown,
+          forfeit,
           leave,
           totalAmount: baseAmount,
         };
@@ -740,14 +764,14 @@ export default async function handler(req, res) {
               salary, total_commission, total_amount, commission_breakdown,
               adjustment, adjustment_note, status, paid_at, paid_by, paid_method, note,
               leave_days, leave_quota, leave_excess_days, leave_deduction, leave_basis, leave_used_before,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?)`,
+              commission_forfeited, commission_leave_limit, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?, ?, ?)`,
             args: [
               c.id, runId, c.employee.id, c.employee.name, c.employee.position, c.employee.homeBranch,
               c.employee.salary, c.totalCommission, finalAmount, JSON.stringify(c.breakdown),
               adjustment, adjustmentNote, status, paidAt, paidBy, paidMethod, itemNote,
               c.leave.leaveDays, c.leave.quota, c.leave.excessDays, c.leave.deduction, c.leave.usedBefore,
-              prev ? prev.created_at : now, now,
+              c.forfeit.forfeited, c.forfeit.limit, prev ? prev.created_at : now, now,
             ],
           });
         }
@@ -775,13 +799,13 @@ export default async function handler(req, res) {
               id, payroll_run_id, employee_id, employee_name, position, home_branch,
               salary, total_commission, total_amount, commission_breakdown,
               leave_days, leave_quota, leave_excess_days, leave_deduction, leave_basis, leave_used_before,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?)`,
+              commission_forfeited, commission_leave_limit, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?, ?, ?)`,
             args: [
               c.id, runId, c.employee.id, c.employee.name, c.employee.position, c.employee.homeBranch,
               c.employee.salary, c.totalCommission, c.totalAmount, JSON.stringify(c.breakdown),
               c.leave.leaveDays, c.leave.quota, c.leave.excessDays, c.leave.deduction, c.leave.usedBefore,
-              now, now,
+              c.forfeit.forfeited, c.forfeit.limit, now, now,
             ],
           });
         }
@@ -811,21 +835,25 @@ export default async function handler(req, res) {
       const { itemId, runId, action, updates } = req.body || {};
       const now = new Date().toISOString();
 
-      // ตั้งวันลาที่ได้ต่อปี — รายคน (employeeId) หรือทุกคนที่ยังทำงาน (all) · quota null = ยกเลิก (ไม่หัก)
-      if (action === 'set-leave-quota') {
+      // ตั้งวันลาที่ได้ต่อปี (set-leave-quota) / ลาเกินกี่วันในเดือนตัดคอม (set-commission-leave-limit)
+      // — รายคน (employeeId) หรือทุกคนที่ยังทำงาน (all) · quota null = ยกเลิก (ไม่หัก/ไม่ตัด)
+      if (action === 'set-leave-quota' || action === 'set-commission-leave-limit') {
         const { employeeId, all } = req.body;
+        const [column, max] = action === 'set-leave-quota'
+          ? ['leave_quota_yearly', MAX_YEARLY_QUOTA]
+          : ['commission_leave_limit', MAX_COMMISSION_LEAVE_LIMIT];
         const quota = normalizeQuota(req.body.quota);
-        if (quota !== null && (quota < 0 || quota > MAX_YEARLY_QUOTA || quota * 2 !== Math.round(quota * 2))) {
-          return res.status(400).json({ error: `วันลาต้องเป็น 0–${MAX_YEARLY_QUOTA} วัน (ทีละครึ่งวัน)` });
+        if (quota !== null && (quota < 0 || quota > max || quota * 2 !== Math.round(quota * 2))) {
+          return res.status(400).json({ error: `จำนวนวันต้องเป็น 0–${max} วัน (ทีละครึ่งวัน)` });
         }
         if (!all && !employeeId) return res.status(400).json({ error: 'employeeId is required' });
         const result = all
           ? await db.execute({
-            sql: 'UPDATE employees SET leave_quota_yearly = ?, updated_at = ? WHERE is_active = 1',
+            sql: `UPDATE employees SET ${column} = ?, updated_at = ? WHERE is_active = 1`,
             args: [quota, now],
           })
           : await db.execute({
-            sql: 'UPDATE employees SET leave_quota_yearly = ?, updated_at = ? WHERE id = ?',
+            sql: `UPDATE employees SET ${column} = ?, updated_at = ? WHERE id = ?`,
             args: [quota, now, employeeId],
           });
         return res.status(200).json({ success: true, updated: Number(result.rowsAffected) || 0 });
