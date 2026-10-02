@@ -28,6 +28,7 @@ export interface PayrollItem {
   leaveDeduction: number;               // หักลาเกิน (บวก) — หักจากคอมก่อน ไม่พอหักจากเงินเดือน
   leaveBasis: 'month' | 'year';         // 'month' = รอบที่คำนวณก่อน 2 ต.ค. 2026 (โควตาต่อเดือน)
   leaveUsedBefore: number;              // วันลาสะสมในปีนี้ก่อนเดือนนี้
+  leaveDayDivisor: number;              // ตัวหารค่าแรงรายวันตอนคำนวณ (รอบก่อน 2 ต.ค. 2026 = 25)
   commissionForfeited: number;          // คอมที่ถูกตัด (ลาเดือนนี้เกิน commissionLeaveLimit) — commissionBreakdown ยังเป็นยอดก่อนตัด
   commissionLeaveLimit: number | null;  // ลาเกินกี่วันในเดือนตัดคอม — null = ไม่ตัด
   status: PayrollItemStatus;
@@ -70,6 +71,7 @@ export interface PayrollPreviewItem {
   leaveDeduction: number;
   leaveBasis: 'month' | 'year';
   leaveUsedBefore: number;
+  leaveDayDivisor: number;
   commissionForfeited: number;
   commissionLeaveLimit: number | null;
   status: PayrollItemStatus;
@@ -115,6 +117,6 @@ export interface LeaveSummaryEmployee {
   commissionLeaveLimit: number | null;  // ลาเกินกี่วันในเดือนตัดคอม — null = ไม่ตัด
   commissionForfeit: boolean;           // เดือนที่เลือกลาเกินเกณฑ์ → ถูกตัดคอม
   excessDays: number;
-  dailyRate: number;                    // เงินเดือน ÷ 25
+  dailyRate: number;                    // เงินเดือน ÷ leaveDayDivisor
   deduction: number;                    // ยังไม่จำกัดเพดานตามยอดคอม+เงินเดือน (หน้าจ่ายเงินเดือนจำกัดให้)
 }

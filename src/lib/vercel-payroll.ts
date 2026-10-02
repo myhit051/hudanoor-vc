@@ -145,7 +145,8 @@ export async function deletePayrollRun(runId: string) {
 
 // ─── การลา (Admin เท่านั้น) ───
 export async function getLeaves(period: string): Promise<{
-  year: string; employees: LeaveSummaryEmployee[]; runs: LeaveRunStatus[]; rayaDaysPerYear: number; leaves: EmployeeLeave[];
+  year: string; employees: LeaveSummaryEmployee[]; runs: LeaveRunStatus[]; rayaDaysPerYear: number; leaveDayDivisor: number;
+  leaves: EmployeeLeave[];
 }> {
   const res = await fetch(`${API_BASE}/payroll?action=leaves&period=${encodeURIComponent(period)}`, {
     headers: { ...authHeaders() },
@@ -156,6 +157,7 @@ export async function getLeaves(period: string): Promise<{
     employees: Array.isArray(data?.employees) ? data.employees : [],
     runs: Array.isArray(data?.runs) ? data.runs : [],
     rayaDaysPerYear: Number(data?.rayaDaysPerYear) || 3,
+    leaveDayDivisor: Number(data?.leaveDayDivisor) || 26,
     leaves: Array.isArray(data?.leaves) ? data.leaves : [],
   };
 }

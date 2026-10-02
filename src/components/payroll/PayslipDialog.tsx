@@ -221,8 +221,8 @@ export function PayslipDialog({ open, onOpenChange, item, run, shopName = "HUDAN
                     <>
                       <tr>
                         <td className="p-2 border">
-                          หักลาเกิน {formatDays(item.leaveExcessDays)} วัน × {formatCurrency(item.salary / 25)} (เงินเดือน ÷ 25)
-                          {item.leaveDeduction < (item.leaveExcessDays * item.salary) / 25 - 0.005 && " · หักได้ไม่เกินยอดรับ"}
+                          หักลาเกิน {formatDays(item.leaveExcessDays)} วัน × {formatCurrency(item.salary / item.leaveDayDivisor)} (เงินเดือน ÷ {item.leaveDayDivisor})
+                          {item.leaveDeduction < (item.leaveExcessDays * item.salary) / item.leaveDayDivisor - 0.005 && " · หักได้ไม่เกินยอดรับ"}
                         </td>
                         <td className="p-2 border text-right text-red-600 font-medium">
                           −{formatCurrency(item.leaveDeduction)}

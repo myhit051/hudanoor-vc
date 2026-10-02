@@ -3,7 +3,7 @@ import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate, requireAdmin } from '../lib/auth-middleware.js';
 import { parseSheetDate } from '../lib/sheet-date.js';
 import {
-  LEAVE_TYPES, MAX_COMMISSION_LEAVE_LIMIT, MAX_YEARLY_QUOTA, RAYA_DAYS_PER_YEAR, calcCommissionForfeit,
+  LEAVE_DAY_DIVISOR, LEAVE_TYPES, MAX_COMMISSION_LEAVE_LIMIT, MAX_YEARLY_QUOTA, RAYA_DAYS_PER_YEAR, calcCommissionForfeit,
   calcLeaveDeduction, expandDates, isValidDate, loadLeaveMonthsByEmployee, normalizeQuota, rowToLeave, usageForPeriod,
 } from '../lib/leaves.js';
 
@@ -93,6 +93,7 @@ function rowToItem(row) {
     leaveDeduction: Number(row.leave_deduction) || 0,
     leaveBasis: row.leave_basis === 'year' ? 'year' : 'month',
     leaveUsedBefore: Number(row.leave_used_before) || 0,
+    leaveDayDivisor: Number(row.leave_day_divisor) || 25,
     commissionForfeited: Number(row.commission_forfeited) || 0,
     commissionLeaveLimit: normalizeQuota(row.commission_leave_limit),
     status: row.status,
@@ -148,7 +149,7 @@ async function leaveRunStatus(db, year, employees, leaveMonthsByEmp) {
     db.execute({ sql: `SELECT id, period, status FROM payroll_runs WHERE period LIKE ? ORDER BY period`, args: [`${year}-%`] }),
     db.execute({
       sql: `SELECT i.payroll_run_id, i.employee_id, i.leave_days, i.leave_quota, i.leave_basis, i.leave_used_before,
-              i.commission_leave_limit
+              i.commission_leave_limit, i.leave_day_divisor
             FROM payroll_items i JOIN payroll_runs r ON r.id = i.payroll_run_id WHERE r.period LIKE ?`,
       args: [`${year}-%`],
     }),
@@ -157,6 +158,7 @@ async function leaveRunStatus(db, year, employees, leaveMonthsByEmp) {
   const limitByEmp = new Map(employees.map((e) => [e.id, e.commissionLeaveLimit]));
   const staleRuns = new Set();
   const runPeriod = new Map(runResult.rows.map((r) => [r.id, r.period]));
+  const runStatus = new Map(runResult.rows.map((r) => [r.id, r.status]));
   for (const it of itemResult.rows) {
     if (!quotaByEmp.has(it.employee_id)) continue; // ลาออกแล้ว — ไม่อยู่ในการคำนวณใหม่อยู่ดี
     const usage = usageForPeriod(leaveMonthsByEmp, it.employee_id, runPeriod.get(it.payroll_run_id));
@@ -166,6 +168,8 @@ async function leaveRunStatus(db, year, employees, leaveMonthsByEmp) {
       || (Number(it.leave_used_before) || 0) !== usage.usedBefore
       || normalizeQuota(it.leave_quota) !== quotaByEmp.get(it.employee_id)
       || normalizeQuota(it.commission_leave_limit) !== limitByEmp.get(it.employee_id)
+      // ตัวหารรายวันเปลี่ยน — เตือนเฉพาะรอบร่าง (รอบที่ปิดแล้วจ่ายตามตัวหารเดิม ไม่ใช่ข้อมูลการลาเปลี่ยน)
+      || (runStatus.get(it.payroll_run_id) === 'draft' && (Number(it.leave_day_divisor) || 25) !== LEAVE_DAY_DIVISOR)
     ) staleRuns.add(it.payroll_run_id);
   }
   return runResult.rows.map((r) => ({ period: r.period, status: r.status, stale: staleRuns.has(r.id) }));
@@ -306,7 +310,7 @@ export default async function handler(req, res) {
         });
         const runs = await leaveRunStatus(db, year, empResult.rows.map(rowToPayrollEmployee), leaveMonthsByEmp);
         return res.status(200).json({
-          period, year, employees, runs, rayaDaysPerYear: RAYA_DAYS_PER_YEAR, leaves: leaveResult.rows.map(rowToLeave),
+          period, year, employees, runs, rayaDaysPerYear: RAYA_DAYS_PER_YEAR, leaveDayDivisor: LEAVE_DAY_DIVISOR, leaves: leaveResult.rows.map(rowToLeave),
         });
       }
 
@@ -448,6 +452,7 @@ export default async function handler(req, res) {
             leaveDeduction: leave.deduction,
             leaveBasis: 'year',
             leaveUsedBefore: leave.usedBefore,
+            leaveDayDivisor: leave.divisor,
             commissionForfeited: forfeit.forfeited,
             commissionLeaveLimit: forfeit.limit,
             status: 'pending',
@@ -773,14 +778,14 @@ export default async function handler(req, res) {
               salary, total_commission, total_amount, commission_breakdown,
               adjustment, adjustment_note, status, paid_at, paid_by, paid_method, note,
               leave_days, leave_quota, leave_excess_days, leave_deduction, leave_basis, leave_used_before,
-              commission_forfeited, commission_leave_limit, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?, ?, ?)`,
+              commission_forfeited, commission_leave_limit, leave_day_divisor, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?, ?, ?, ?)`,
             args: [
               c.id, runId, c.employee.id, c.employee.name, c.employee.position, c.employee.homeBranch,
               c.employee.salary, c.totalCommission, finalAmount, JSON.stringify(c.breakdown),
               adjustment, adjustmentNote, status, paidAt, paidBy, paidMethod, itemNote,
               c.leave.leaveDays, c.leave.quota, c.leave.excessDays, c.leave.deduction, c.leave.usedBefore,
-              c.forfeit.forfeited, c.forfeit.limit, prev ? prev.created_at : now, now,
+              c.forfeit.forfeited, c.forfeit.limit, c.leave.divisor, prev ? prev.created_at : now, now,
             ],
           });
         }
@@ -808,13 +813,13 @@ export default async function handler(req, res) {
               id, payroll_run_id, employee_id, employee_name, position, home_branch,
               salary, total_commission, total_amount, commission_breakdown,
               leave_days, leave_quota, leave_excess_days, leave_deduction, leave_basis, leave_used_before,
-              commission_forfeited, commission_leave_limit, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?, ?, ?)`,
+              commission_forfeited, commission_leave_limit, leave_day_divisor, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'year', ?, ?, ?, ?, ?, ?)`,
             args: [
               c.id, runId, c.employee.id, c.employee.name, c.employee.position, c.employee.homeBranch,
               c.employee.salary, c.totalCommission, c.totalAmount, JSON.stringify(c.breakdown),
               c.leave.leaveDays, c.leave.quota, c.leave.excessDays, c.leave.deduction, c.leave.usedBefore,
-              c.forfeit.forfeited, c.forfeit.limit, now, now,
+              c.forfeit.forfeited, c.forfeit.limit, c.leave.divisor, now, now,
             ],
           });
         }
