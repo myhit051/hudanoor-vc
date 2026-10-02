@@ -3,8 +3,9 @@ import { getTursoClient, initSchema } from '../lib/turso.js';
 import { authenticate, requireAdmin } from '../lib/auth-middleware.js';
 import { parseSheetDate } from '../lib/sheet-date.js';
 import {
-  LEAVE_DAY_DIVISOR, LEAVE_TYPES, MAX_COMMISSION_LEAVE_LIMIT, MAX_YEARLY_QUOTA, RAYA_DAYS_PER_YEAR, calcCommissionForfeit,
-  calcLeaveDeduction, expandDates, isValidDate, loadLeaveMonthsByEmployee, normalizeQuota, rowToLeave, usageForPeriod,
+  LEAVE_TYPES, MAX_COMMISSION_LEAVE_LIMIT, MAX_LEAVE_DAY_DIVISOR, MAX_YEARLY_QUOTA, RAYA_DAYS_PER_YEAR, calcCommissionForfeit,
+  calcLeaveDeduction, expandDates, isValidDate, loadLeaveDayDivisor, loadLeaveMonthsByEmployee, normalizeDivisor, normalizeQuota,
+  rowToLeave, usageForPeriod,
 } from '../lib/leaves.js';
 
 // Read all rows from a Google Sheet range (used for legacy import).
@@ -122,7 +123,7 @@ function rowToPayrollEmployee(row) {
 // เงินเดือน + คอม − หักลาเกิน (ยังไม่รวมช่อง "ปรับปรุง")
 // ลาเดือนนี้เกินเกณฑ์ → ตัดคอมทั้งเดือนก่อน แล้วค่อยหักลาเกินจากคอมที่เหลือ (ไม่พอหักจากเงินเดือน)
 // totalCommission ที่คืน = คอมที่ได้จริงหลังตัด · breakdown ยังเป็นคอมที่คิดได้ก่อนตัด
-function computePayrollItem(emp, incomes, leaveMonthsByEmp, period) {
+function computePayrollItem(emp, incomes, leaveMonthsByEmp, period, divisor) {
   const { breakdown, totalCommission: earnedCommission } = calcEmployeeCommission(emp, incomes);
   const usage = usageForPeriod(leaveMonthsByEmp, emp.id, period);
   const forfeit = calcCommissionForfeit({ commission: earnedCommission, limit: emp.commissionLeaveLimit, days: usage.days });
@@ -133,6 +134,7 @@ function computePayrollItem(emp, incomes, leaveMonthsByEmp, period) {
     quota: emp.leaveQuota,
     days: usage.days,
     usedBefore: usage.usedBefore,
+    divisor,
   });
   return {
     breakdown,
@@ -144,7 +146,7 @@ function computePayrollItem(emp, incomes, leaveMonthsByEmp, period) {
 }
 
 // รอบเงินเดือนในปีนั้น + ค่าการลาที่ใช้คิดไว้ยังตรงกับข้อมูลการลาปัจจุบันไหม (stale = ต้องคำนวณใหม่)
-async function leaveRunStatus(db, year, employees, leaveMonthsByEmp) {
+async function leaveRunStatus(db, year, employees, leaveMonthsByEmp, divisor) {
   const [runResult, itemResult] = await Promise.all([
     db.execute({ sql: `SELECT id, period, status FROM payroll_runs WHERE period LIKE ? ORDER BY period`, args: [`${year}-%`] }),
     db.execute({
@@ -169,7 +171,7 @@ async function leaveRunStatus(db, year, employees, leaveMonthsByEmp) {
       || normalizeQuota(it.leave_quota) !== quotaByEmp.get(it.employee_id)
       || normalizeQuota(it.commission_leave_limit) !== limitByEmp.get(it.employee_id)
       // ตัวหารรายวันเปลี่ยน — เตือนเฉพาะรอบร่าง (รอบที่ปิดแล้วจ่ายตามตัวหารเดิม ไม่ใช่ข้อมูลการลาเปลี่ยน)
-      || (runStatus.get(it.payroll_run_id) === 'draft' && (Number(it.leave_day_divisor) || 25) !== LEAVE_DAY_DIVISOR)
+      || (runStatus.get(it.payroll_run_id) === 'draft' && (Number(it.leave_day_divisor) || 25) !== divisor)
     ) staleRuns.add(it.payroll_run_id);
   }
   return runResult.rows.map((r) => ({ period: r.period, status: r.status, stale: staleRuns.has(r.id) }));
@@ -269,13 +271,14 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'period is required (YYYY-MM)' });
         }
         const year = period.slice(0, 4);
-        const [empResult, leaveResult, leaveMonthsByEmp] = await Promise.all([
+        const [empResult, leaveResult, leaveMonthsByEmp, divisor] = await Promise.all([
           db.execute(`SELECT * FROM employees WHERE is_active = 1 ORDER BY name`),
           db.execute({
             sql: `SELECT * FROM employee_leaves WHERE date LIKE ? ORDER BY is_lump DESC, date DESC, created_at DESC`,
             args: [`${period}-%`],
           }),
           loadLeaveMonthsByEmployee(db, year),
+          loadLeaveDayDivisor(db),
         ]);
         const employees = empResult.rows.map((row) => {
           const emp = rowToPayrollEmployee(row);
@@ -285,6 +288,7 @@ export default async function handler(req, res) {
             quota: emp.leaveQuota,
             days: usage.days,
             usedBefore: usage.usedBefore,
+            divisor,
           });
           const idx = Number(period.slice(5, 7)) - 1;
           return {
@@ -308,9 +312,9 @@ export default async function handler(req, res) {
             deduction: leave.deduction,
           };
         });
-        const runs = await leaveRunStatus(db, year, empResult.rows.map(rowToPayrollEmployee), leaveMonthsByEmp);
+        const runs = await leaveRunStatus(db, year, empResult.rows.map(rowToPayrollEmployee), leaveMonthsByEmp, divisor);
         return res.status(200).json({
-          period, year, employees, runs, rayaDaysPerYear: RAYA_DAYS_PER_YEAR, leaveDayDivisor: LEAVE_DAY_DIVISOR, leaves: leaveResult.rows.map(rowToLeave),
+          period, year, employees, runs, rayaDaysPerYear: RAYA_DAYS_PER_YEAR, leaveDayDivisor: divisor, leaves: leaveResult.rows.map(rowToLeave),
         });
       }
 
@@ -435,8 +439,9 @@ export default async function handler(req, res) {
 
         const incomes = await loadIncomesForPeriod(period);
         const leaveMonthsByEmp = await loadLeaveMonthsByEmployee(db, period.slice(0, 4));
+        const divisor = await loadLeaveDayDivisor(db);
         const items = employees.map((emp) => {
-          const { breakdown, totalCommission, forfeit, leave, baseAmount } = computePayrollItem(emp, incomes, leaveMonthsByEmp, period);
+          const { breakdown, totalCommission, forfeit, leave, baseAmount } = computePayrollItem(emp, incomes, leaveMonthsByEmp, period, divisor);
           return {
             employeeId: emp.id,
             employeeName: emp.name,
@@ -729,12 +734,13 @@ export default async function handler(req, res) {
 
       const incomes = await loadIncomesForPeriod(period);
       const leaveMonthsByEmp = await loadLeaveMonthsByEmployee(db, period.slice(0, 4));
+      const divisor = await loadLeaveDayDivisor(db);
       const now = new Date().toISOString();
       const runId = existing.rows.length > 0 ? existing.rows[0].id : `prun_${Date.now()}`;
 
       // Compute items
       const computed = employees.map((emp) => {
-        const { breakdown, totalCommission, forfeit, leave, baseAmount } = computePayrollItem(emp, incomes, leaveMonthsByEmp, period);
+        const { breakdown, totalCommission, forfeit, leave, baseAmount } = computePayrollItem(emp, incomes, leaveMonthsByEmp, period, divisor);
         return {
           id: `pitem_${runId}_${emp.id}`,
           employee: emp,
@@ -871,6 +877,20 @@ export default async function handler(req, res) {
             args: [quota, now, employeeId],
           });
         return res.status(200).json({ success: true, updated: Number(result.rowsAffected) || 0 });
+      }
+
+      // ตัวหารค่าแรงรายวันของการหักลาเกิน (ทั้งร้าน) — รอบที่ปิดแล้วไม่เปลี่ยน รอบร่างขึ้นเตือนให้คำนวณใหม่
+      if (action === 'set-leave-day-divisor') {
+        const divisor = normalizeDivisor(req.body.divisor);
+        if (divisor === null) {
+          return res.status(400).json({ error: `ตัวหารต้องเป็น 1–${MAX_LEAVE_DAY_DIVISOR} (ทีละครึ่ง)` });
+        }
+        await db.execute({
+          sql: `INSERT INTO app_config (key, value, updated_at, updated_by) VALUES ('leave_day_divisor', ?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+          args: [String(divisor), now, authUser?.name || ''],
+        });
+        return res.status(200).json({ success: true, divisor });
       }
 
       // Finalize a run

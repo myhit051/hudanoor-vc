@@ -13,7 +13,9 @@ import {
   CalendarOff, CalendarDays, CalendarRange, Check, Loader2, Trash2, AlertCircle, RefreshCw, Info, Lock, History,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
-import { addLeave, createOrRegeneratePayroll, deleteLeave, getLeaves, setLeaveLump, setLeaveQuota } from "@/lib/vercel-payroll";
+import {
+  addLeave, createOrRegeneratePayroll, deleteLeave, getLeaves, setLeaveDayDivisor, setLeaveLump, setLeaveQuota,
+} from "@/lib/vercel-payroll";
 import { LEAVE_TYPE_LABEL, formatDays } from "@/lib/leave-utils";
 import { LeaveType } from "@/types/payroll";
 import { toast } from "@/hooks/use-toast";
@@ -272,6 +274,34 @@ export function Leaves() {
   const [allQuota, setAllQuota] = useState("");
   const [allLimit, setAllLimit] = useState("");
 
+  // ตัวหารค่าแรงรายวัน (ทั้งร้าน)
+  const divisor = data?.leaveDayDivisor ?? 26;
+  const [divisorDraft, setDivisorDraft] = useState("");
+  useEffect(() => { if (data) setDivisorDraft(String(data.leaveDayDivisor)); }, [data]);
+  const divisorMutation = useMutation({
+    mutationFn: setLeaveDayDivisor,
+    onSuccess: async (_r, value) => {
+      toast({ title: `ตั้งตัวหารเป็น ÷ ${value} แล้ว`, description: "เดือนที่ยังไม่ปิดรอบ กด \"คำนวณเงินเดือนใหม่\" เพื่อใช้ตัวหารใหม่" });
+      await invalidateLeaves();
+    },
+    onError: (err: any) => {
+      toast({ title: "ตั้งตัวหารไม่สำเร็จ", description: err.message || "", variant: "destructive" });
+    },
+  });
+  const saveDivisor = () => {
+    const value = Number(divisorDraft);
+    if (divisorDraft.trim() === "" || !Number.isFinite(value) || value < 1 || value > 31) {
+      toast({ title: "ตัวหารต้องเป็น 1–31", variant: "destructive" });
+      return;
+    }
+    if (value === divisor) return;
+    if (!confirm(
+      `เปลี่ยนหักลาเกินเป็นวันละ เงินเดือน ÷ ${value} (เดิม ÷ ${divisor})?\n` +
+      `เดือนที่ปิดรอบแล้วไม่เปลี่ยน · เดือนที่ยังไม่ปิดต้องกด "คำนวณใหม่"`
+    )) return;
+    divisorMutation.mutate(value);
+  };
+
   const submitLeave = () => {
     if (!employeeId) {
       toast({ title: "กรุณาเลือกพนักงาน", variant: "destructive" });
@@ -366,7 +396,7 @@ export function Leaves() {
             บันทึกการลา
           </h1>
           <p className="text-muted-foreground mt-1">
-            ลาสะสมเกินวันที่ได้ต่อปี (ม.ค.–ธ.ค.) หักวันละ เงินเดือน ÷ {data?.leaveDayDivisor ?? 26} ในเดือนที่เกิน — หักจากคอมก่อน คอมไม่พอหักจากเงินเดือน
+            ลาสะสมเกินวันที่ได้ต่อปี (ม.ค.–ธ.ค.) หักวันละ เงินเดือน ÷ {formatDays(divisor)} ในเดือนที่เกิน — หักจากคอมก่อน คอมไม่พอหักจากเงินเดือน
             · ลาในเดือนเกินเกณฑ์ = ไม่ได้คอมเดือนนั้น · หยุดรายอ {rayaPerYear} วัน/ปี ไม่นับเป็นวันลา
           </p>
         </div>
@@ -709,6 +739,39 @@ export function Leaves() {
                   แก้รายคนได้ในช่อง "ได้/ปี" และ "ตัดคอมถ้าลาเกิน" · เว้นว่าง = ยังไม่ตั้ง (ไม่หัก/ไม่ตัด) · วันลานับใหม่ทุก 1 ม.ค.
                   · ตัวเลขสีแดงในตาราง = เดือนที่ลาเกินเกณฑ์ (ไม่ได้คอม)
                 </span>
+                <div className="basis-full flex flex-wrap items-end gap-2 border-t pt-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="leave-divisor" className="text-sm">หักลาเกินวันละ — ทั้งร้าน</Label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">เงินเดือน ÷</span>
+                      <Input
+                        id="leave-divisor"
+                        type="number"
+                        inputMode="decimal"
+                        min={1}
+                        max={31}
+                        step={0.5}
+                        value={divisorDraft}
+                        onChange={(e) => setDivisorDraft(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveDivisor(); }}
+                        className="h-9 w-20 text-right"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9"
+                    onClick={saveDivisor}
+                    disabled={divisorMutation.isPending || !data || Number(divisorDraft) === divisor}
+                  >
+                    {divisorMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    บันทึกตัวหาร
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    ตอนนี้ ÷ {formatDays(divisor)} · เช่น ทำงาน 6 วัน/สัปดาห์ ≈ 26 วัน/เดือน · เดือนที่ปิดรอบแล้วใช้ตัวหารเดิม
+                  </span>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
